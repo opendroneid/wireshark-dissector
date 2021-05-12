@@ -13,3 +13,5 @@ Wireshark dissector plugin to parse and analyze captured Open Drone ID packets
 2. Installation of dissector (windows)
     1. If one does not exist, create 1 "plugins" folder under \\\<user dir\>\AppData\Roaming\Wireshark\
     2. Clone this repo to that plugins folder
+
+![Wireshark Screenshot](https://github.com/opendroneid/wireshark-dissector/blob/main/img/screenshot.png)
