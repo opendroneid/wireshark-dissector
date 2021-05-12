@@ -395,7 +395,7 @@ function odid_protocol.dissector(buffer, pinfo, tree)
         return
     end
     -- check that ie oui is either parrot or ASD-STAN
-    if not (buffer(offset_oui,3):bytes() == {0x90,0x3a,0xe6} or buffer(offset_oui,3):bytes() == {0xfa,0xob,0xbc} ) then
+    if not buffer(offset_oui,3):bytes() == {0x90,0x3a,0xe6} and not buffer(offset_oui,3):bytes() == {0xfa,0x0b,0xbc}  then
         return
     end
     frameLen = buffer(offset_len,1):int()
