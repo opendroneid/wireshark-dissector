@@ -2,6 +2,8 @@
 
 Wireshark dissector plugin to parse and analyze captured Open Drone ID packets
 
+It currently only supports Wi-Fi Beacon, with changes on the way for Wi-Fi NAN and Bluetooth
+
 ### Guide
 
 1. Get Wireshark to sniff using "monitor mode".  I had the most luck by doing the following:
