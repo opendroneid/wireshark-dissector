@@ -14,8 +14,8 @@ local msgTypes = {
     [1]="Location/Vector",
     [2]="Authentication",
     [3]="Self ID",
-    [4]="Operator ID",
-    [5]="System",
+    [4]="System",
+    [5]="Operator ID",
     [15]="Message Pack"
 }
 local protoVersions = {
@@ -176,6 +176,10 @@ local EUClasses = {
     [6] = "Class 5",
     [7] = "Class 6"
 }
+local operatorIDTypes = {
+    [0] = "Operator ID"
+}
+
 --
 --  Field Protocols
 --
@@ -253,9 +257,9 @@ odid_system_opGeoAlt = ProtoField.uint16("OpenDroneID.system_opGeoAlt","Operator
 odid_system_reserved = ProtoField.bytes("OpenDroneID.system_reserved","Reserved",base.SPACE)
 
 -- Operator ID Fields
-odid_operator_type = ProtoField.uint8("OpenDroneID.operator_type","Operator ID Type",base.DEC,selfIDTypes)
+odid_operator_type = ProtoField.uint8("OpenDroneID.operator_type","Operator ID Type",base.DEC,operatorIDTypes)
 odid_operator_id = ProtoField.string("OpenDroneID.operator_id","Operator ID",base.ASCII)
-odid_operator_reserved = ProtoField.string("OpenDroneID.operator_reserved","Reserved",base.ASCII)
+odid_operator_reserved = ProtoField.bytes("OpenDroneID.operator_reserved","Reserved",base.SPACE)
 
 odid_protocol.fields = { 
     odid_app_code, odid_counter, odid_msgType, odid_protoVersion, odid_msgPack_msgSize, odid_msgPack_msgQty, 
@@ -275,7 +279,7 @@ odid_protocol.fields = {
 
     odid_system_flags, odid_system_flag_class, odid_system_flag_locType, odid_system_lat, odid_system_lon, 
     odid_system_areaCount, odid_system_areaRadius, odid_system_areaCeiling, odid_system_areaFloor, odid_system_uaClass, 
-    odid_system_opGeoAlt, odid_system_reserved,
+    odid_system_uaClassEUCat,odid_system_uaClassEUClass, odid_system_opGeoAlt, odid_system_reserved,
 
     odid_operator_type, odid_operator_id, odid_operator_reserved
 }
@@ -348,7 +352,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_system_areaRadius, buffer(msg_start+12,1))
         subsub[treeIndex]:add_le(odid_system_areaCeiling, buffer(msg_start+13,2))
         subsub[treeIndex]:add_le(odid_system_areaFloor, buffer(msg_start+15,2))
-        if bit32.extract(buffer(msg_start+1,1):uint(),0,4) == 1 then
+        if bit32.extract(buffer(msg_start+1,1):uint(),2,2) == 1 then
             subsub[treeIndex]:add_le(odid_system_uaClassEUCat, buffer(msg_start+17,1))
             subsub[treeIndex]:add_le(odid_system_uaClassEUClass, buffer(msg_start+17,1))
         else
@@ -377,7 +381,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
 end
 function odid_protocol.dissector(buffer, pinfo, tree)
     length = buffer:len()
-    if length == 0 then 
+    if length < 0x48 + 5 + 25 then 
         return 
     end
     --
