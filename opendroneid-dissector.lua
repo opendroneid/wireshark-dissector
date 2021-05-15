@@ -2,6 +2,8 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
+debugMode = 0
+
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 
 --
@@ -284,8 +286,15 @@ odid_protocol.fields = {
     odid_operator_type, odid_operator_id, odid_operator_reserved
 }
 
+function debugPrint(pstring)
+    if debugMode == 1 then
+        print(pstring)
+    end
+end
+
 function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
     subMsgType =  bit32.extract(buffer(msg_start,1):int(),4,4)
+    debugPrint("subMsgType: "..subMsgType..", size:"..size)
     if subMsgType == 0 then
         subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Basic ID Message (0)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
@@ -367,7 +376,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_operator_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_operator_id, buffer(msg_start+2,20))
         subsub[treeIndex]:add_le(odid_operator_reserved, buffer(msg_start+22,3))
-    elseif msgType == 15 then
+    elseif subMsgType == 15 then
         subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Message Pack (15)")
         subsub[treeIndex]:add_le(odid_msgType,  buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion,  buffer(msg_start+0,1))
@@ -379,49 +388,121 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         --end
     end
 end
+
+function findMessageOffset(buffer,len)
+    local frameOffset = {
+        frameType = 0x11,
+        -- beacon = 0x80, --NAN 0xd0
+        beaconTags = 0x35,
+        publicAction = 0x29,
+        nanSDA = 0x2f
+    }
+    local frameTypes = {
+        BEACON = 0x8000,
+        ACTION = 0xd000
+    }
+    local ouis = {
+        parrot    = string.char(0x90,0x3a,0xe6),
+        asdstan   = string.char(0xfa,0x0b,0xbc),
+        nanParams = string.char(0x04, 0x09, 0x50, 0x6f, 0x9a, 0x13),
+        nanODID   = string.char(0x88, 0x69, 0x19, 0x9d, 0x92, 0x09)
+    }
+    local protoLen = 0
+    -- First, determine if Beacon or Action frame (reject otherwise)
+    local frameType = buffer(frameOffset.frameType,2):uint()
+    debugPrint ("frameType: "..frameType)
+    if frameType == frameTypes.BEACON then
+        -- this is a beacon, so iterate through tags
+        bp = frameOffset.beaconTags
+        while bp < len do
+            if buffer(bp,1):uint() == 221 then -- vendor specific IE
+                -- check that ie oui is either parrot or ASD-STAN
+                if (buffer(bp+2,3):bytes():raw() == ouis.asdstan or buffer(bp+2,3):bytes():raw() == ouis.parrot) then
+                    if buffer(bp+5,1):uint() == 0x0d then
+                        -- we have a proper odid beacon frame
+                        protoLen = buffer(bp+1,1):uint() - 4
+                        return bp+6,protoLen
+                    else
+                        -- even though OUI matches, this is not ODID
+                        debugPrint("VSIE match, OUI Match, no App Code Match")
+                        return 0,0
+                    end
+                else
+                    -- even though this is a VSIE, it doesn't match a ODID OUI
+                    debugPrint("VSIE match, no OUI match")
+                    debugPrint(buffer(bp+2,3):bytes():raw())
+                    return 0,0
+                end
+            else
+                -- skip to next tag
+                debugPrint ("tag bp="..bp..",type="..buffer(bp,1):uint()..", no VSIE(221) match")
+                bp = bp + buffer(bp+1,1):uint() + 2
+            end
+        end
+        -- no VSIE found
+        debugPrint("This is a beacon, but no VSIE found, bp="..bp..", len="..len)
+        return 0,0
+    elseif frameType == frameTypes.ACTION then
+        bp = frameOffset.publicAction
+        if buffer(bp,6):bytes():raw() == ouis.nanParams then
+            -- we have NAN, now lets check for ODID
+            bp = frameOffset.nanSDA
+            if buffer(bp+3,6):bytes():raw() == ouis.nanODID then
+                -- all checks out
+                protoLen = buffer(bp+12,1):uint()
+                return bp+13, protoLen
+            else
+                -- we have NAN, but wrong app hash
+                debugPrint("NAN, but not ODID hash")
+                return 0,0
+            end
+        else
+            -- it may be an action frame, but not NAN
+            debugPrint("Action frame, but not NAN")
+            return 0,0
+        end
+    else
+        debugPrint("Not beacon or Action Frame")
+        return 0,0
+    end
+end
+
 function odid_protocol.dissector(buffer, pinfo, tree)
-    length = buffer:len()
-    if length < 0x48 + 5 + 25 then 
+
+    local length = buffer:len()
+    if length < 0x3c + 25 then 
+        debugPrint("too short")
         return 
     end
-    --
-    -- TODO: 
-    --  1. Rather than using a static offset, figure out how to "find" the offset to the VSIE.
-    --  2. Add NAN Support
-    --
-    local offset_vend_tag = 0x48
-    local offset_len=offset_vend_tag+1
-    local offset_oui = offset_vend_tag + 2
-    local start = offset_vend_tag + 5
 
-    -- check for vend specific ie
-    if not (buffer(offset_vend_tag,1):uint() == 221) then
+    start, protoLen = findMessageOffset(buffer,length)
+    if start == 0 then
+        debugPrint("start==0")
         return
     end
-    -- check that ie oui is either parrot or ASD-STAN
-    if not buffer(offset_oui,3):bytes() == {0x90,0x3a,0xe6} and not buffer(offset_oui,3):bytes() == {0xfa,0x0b,0xbc}  then
-        return
-    end
-    frameLen = buffer(offset_len,1):int()
-    msgTypeByte = buffer(start+2,1)
-    msgType = bit32.extract(msgTypeByte:uint(),4,4)
+
+    local msgTypeByte = buffer(start+1,1)
+    local msgType = bit32.extract(msgTypeByte:uint(),4,4)
+    debugPrint ("msgType1: "..msgType)
     subsub={}
     pinfo.cols.protocol = odid_protocol.name
-    local subtree = tree:add(odid_protocol, buffer(start,frameLen-3), "Open Drone ID - Beacon Frame")
-    subtree:add_le(odid_app_code, buffer(start+0,1))
-    subtree:add_le(odid_counter,  buffer(start+1,1))
+    subtree = tree:add(odid_protocol, buffer(start,protoLen), "Open Drone ID")
+    subtree:add_le(odid_counter,  buffer(start+0,1))
+
     if msgType == 15 then
-        subMsgSize = buffer(start+3,1):int()
-        subMsgQty = buffer(start+4,1):int()
-        odid_messageSubTree(buffer,subtree,start+2,0,subMsgSize*subMsgQty+3)
-        msgSize = buffer(start+3,1):int()
-        for n=1,buffer(start+4,1):int() do
-            msg_start = start+5
+        local subMsgSize = buffer(start+2,1):int()
+        local subMsgQty = buffer(start+3,1):int()
+        debugPrint("subMsgSize: "..subMsgSize..", subMsgQty: "..subMsgQty)
+        odid_messageSubTree(buffer,subtree,start+1,0,subMsgSize*subMsgQty+3)
+        local msgSize = buffer(start+2,1):int()
+
+        for n=1,buffer(start+3,1):int() do
+            local msg_start = start+4
             odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize)
         end
     else
         msgSize=25
-        odid_messageSubTree(buffer,subtree,start+2,0,msgSize)
+        odid_messageSubTree(buffer,subtree,start+1,0,msgSize)
     end
 end
 --local vend_specific_oui = DissectorTable.get("wlan.tag.oui")
