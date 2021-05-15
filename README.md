@@ -2,7 +2,7 @@
 
 Wireshark dissector plugin to parse and analyze captured Open Drone ID packets
 
-It currently only supports Wi-Fi Beacon, with changes on the way for Wi-Fi NAN and Bluetooth
+It currently only supports Wi-Fi Beacon and Wi-Fi NAN.  Bluetooth will be next.
 
 ### Guide
 
