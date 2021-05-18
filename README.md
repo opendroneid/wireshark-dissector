@@ -21,7 +21,7 @@ It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will
 
 3. Bluetooth Sniffing
     1.  Although one may be able to get an integrated hardware working, you may have better luck with some external bluetooth device that has already been proven for this purpose.
-    2. The [Nordic nRF52840 dongle](https://www.nordicsemi.com/Software-and-tools/Development-Kits/nRF52840-Dongle) was used to validate the dissector.  To get the dongle working, you must do the following:
+    2. The [Nordic nRF52840 dongle](https://www.nordicsemi.com/Software-and-tools/Development-Kits/nRF52840-Dongle) was used to validate the dissector (BT4 only so far, we're not yet sure on its support of BT5 Long Range sniffing).  To get the dongle working, you must do the following:
 
         1. Install [nRF Connect](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Connect-for-desktop).
         2. Within nRF Connect, install the "Programmer" app.
