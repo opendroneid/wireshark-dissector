@@ -1,20 +1,32 @@
 # opendroneid-wireshark-dissector
 
-Wireshark dissector plugin to parse and analyze captured Open Drone ID packets
+[Wireshark](https://www.wireshark.org) dissector plugin to parse and analyze captured Open Drone ID packets
 
-It currently only supports Wi-Fi Beacon and Wi-Fi NAN.  Bluetooth will be next.
+It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will be next.
 
 ### Guide
 
-1. Get Wireshark to sniff using "monitor mode".  I had the most luck by doing the following:
-    1. Install "[Acrylic Wi-Fi Sniffer](https://www.acrylicwifi.com/en/downloads-free-license-wifi-wireless-network-software-tools/download-acrylic-wi-fi-sniffer/)" (trial)
-    2. Run Wireshark *as Administrator* (this is a must)
-    3. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface
-    4. Many of the integrated Wi-Fi adapters will not support monitor mode, some USB adapters do.  I've had good luck with the ASUS 802.11n USB adapter.
-
-2. Installation of dissector in Wireshark (Windows)
-    1. If one does not exist, create 1 "plugins" folder under \\\<user dir\>\AppData\Roaming\Wireshark\ . You can find a link to this folder by clicking "Help->About->Folders->Personal Lua Plugins
-    2. Clone this repo to that plugins folder
+1. Installation of dissector in Wireshark (Windows)
+    1. Within Wireshark, click on "Help->About->Folders->Personal Lua Plugins" and allow it to create a "plugins" folder as needed. 
+    2. Clone this repo to that plugins folder.
     3. While in Wireshark, press CTRL+SHIFT+L to re-read the new dissector(s)
 
-![Wireshark Screenshot](https://github.com/opendroneid/wireshark-dissector/blob/main/img/screenshot.png)
+2. Wi-Fi sniffing
+    1. Open Drone ID over Wi-Fi works from broadcast frames without a connection to any specific network.  Therefore, it is necessary to get Wireshark to sniff using "monitor mode". If you have trouble getting it working directly with your installed Wi-Fi device and drivers, we have been able to get it to work by doing the following:
+    2. Install "[Acrylic Wi-Fi Sniffer](https://www.acrylicwifi.com/en/downloads-free-license-wifi-wireless-network-software-tools/download-acrylic-wi-fi-sniffer/)" (trial)
+    3. Run Wireshark **as Administrator** (this is a must)
+    4. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface. (See bluetooth step 3 screenshot)
+    5. Many of the integrated Wi-Fi adapters will not support monitor mode, some USB adapters do.  The ASUS USB-N13 (along with Acrylic Sniffer) was used for the screenshot below.
+    ![Wireshark Wi-Fi Screenshot](img/screenshot.png)
+
+3. Bluetooth Sniffing
+    1.  Although one may be able to get an integrated hardware working, you may have better luck with some external bluetooth device that has already been proven for this purpose.
+    2. The [Nordic nRF52840 dongle](https://www.nordicsemi.com/Software-and-tools/Development-Kits/nRF52840-Dongle) was used to validate the dissector.  To get the dongle working, you must do the following:
+
+        1. Install [nRF Connect](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Connect-for-desktop).
+        2. Within nRF Connect, install the "Programmer" app.
+        3. Download/Install nRF sniffer according to the Nordic [instructions](https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_sniffer_ble%2FUG%2Fsniffer_ble%2Fintro.html).
+    3. Once the BT sniffer is setup in Wireshark, be sure to start the sniffing process using the "config gear" icon and select "Advertisement Frames only" in the startup dialog (this will limit the noise).
+        ![Wireshark BT Start](img/bt_start.png)
+    4. Start Sniffing!
+    ![Wireshark BT Screenshot](img/screenshot_bt.png)

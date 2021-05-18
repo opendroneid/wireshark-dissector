@@ -204,6 +204,7 @@ odid_basicID_uaType = ProtoField.uint8("OpenDroneID.basicID_uaType", "UA Type", 
 odid_basicID_id_asc = ProtoField.string("OpenDroneID.basicID_id_asc", "ID", base.ASCII)
 --    if idType == 4, show binary
 odid_basicID_id_bin = ProtoField.bytes("OpenDroneID.basicID_id_bin", "ID", base.SPACE)
+odid_basicID_reserved = ProtoField.bytes("OpenDroneID.basicID_reserved","Reserved",base.SPACE)
 
 -- Location/Vector Fields
 odid_loc_status = ProtoField.uint8("OpenDroneID.loc_status", "UAS Status", base.DEC, statuses, 0xf0)
@@ -228,7 +229,7 @@ odid_loc_speedAccuracy = ProtoField.uint8("OpenDroneID.loc_speedAccuracy","Speed
 odid_loc_timeStamp = ProtoField.uint16("OpenDroneID.loc_timeStamp","Timestamp (1/10s since hour)",base.DEC)
 odid_loc_tsReserved = ProtoField.uint8("OpenDroneID.loc_tsReserved","Reserved",base.DEC,{},0xf0)
 odid_loc_tsAccuracy = ProtoField.uint8("OpenDroneID.loc_tsAccuracy","Timestamp Accuracy",base.DEC,{},0x0f)
-odid_loc_reserved = ProtoField.uint8("OpenDroneID.loc_reserved","Reserved",base.DEC)
+odid_loc_reserved = ProtoField.bytes("OpenDroneID.loc_reserved","Reserved",base.SPACE)
 
 -- Authentication Fields
 odid_auth_type = ProtoField.uint8("OpenDroneID.auth_type","Auth Type",base.DEC,authTypes,0xf0)
@@ -266,7 +267,7 @@ odid_operator_reserved = ProtoField.bytes("OpenDroneID.operator_reserved","Reser
 odid_protocol.fields = { 
     odid_app_code, odid_counter, odid_msgType, odid_protoVersion, odid_msgPack_msgSize, odid_msgPack_msgQty, 
 
-    odid_basicID_idType, odid_basicID_uaType, odid_basicID_id_a, odid_basicID_id_b,
+    odid_basicID_idType, odid_basicID_uaType, odid_basicID_id_asc, odid_basicID_id_bin, odid_basicID_reserved,
 
     odid_loc_flag_ewDirectionSegment, odid_loc_flag_heightType, odid_loc_flag_speedMultiplier,
 
@@ -296,13 +297,18 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
     subMsgType =  bit32.extract(buffer(msg_start,1):int(),4,4)
     debugPrint("subMsgType: "..subMsgType..", size:"..size)
     if subMsgType == 0 then
+        local subMsgIDType = bit32.extract(buffer(msg_start+1,1):uint(),4,4)
         subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Basic ID Message (0)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
-        subsub[treeIndex]:add_le(odid_id_idType, buffer(msg_start+1,1))
-        subsub[treeIndex]:add_le(odid_id_uaType, buffer(msg_start+1,1))
-        subsub[treeIndex]:add_le(odid_id_uasID, buffer(msg_start+2,20))
-        subsub[treeIndex]:add_le(odid_id_reserved, buffer(msg_start+22,3))
+        subsub[treeIndex]:add_le(odid_basicID_idType, buffer(msg_start+1,1))
+        subsub[treeIndex]:add_le(odid_basicID_uaType, buffer(msg_start+1,1))
+        if subMsgIDType == 4 then -- Specific type should be shown as binary
+            subsub[treeIndex]:add_le(odid_basicID_id_bin, buffer(msg_start+2,20))
+        else -- otherwise, ASCII
+            subsub[treeIndex]:add_le(odid_basicID_id_asc, buffer(msg_start+2,20))
+        end
+        subsub[treeIndex]:add_le(odid_basicID_reserved, buffer(msg_start+22,3))
     elseif subMsgType == 1 then
         subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Location/Vector Message (1)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
@@ -399,7 +405,13 @@ function findMessageOffset(buffer,len)
     }
     local frameTypes = {
         BEACON = 0x8000,
-        ACTION = 0xd000
+        ACTION = 0xd000,
+        BT_ADV = 0x8e89bed6,
+        BT_ADV_NONCONN_IND = 0x2,
+        BT_ADV_SCAN_IND = 0x6,
+        BT_SVC_DATA_TYPE = 0x16,
+        ASTM_UUID = 0xfffa,
+        ODID_APP_CODE = 0x0d
     }
     local ouis = {
         parrot    = string.char(0x90,0x3a,0xe6),
@@ -410,6 +422,7 @@ function findMessageOffset(buffer,len)
     local protoLen = 0
     -- First, determine if Beacon or Action frame (reject otherwise)
     local frameType = buffer(frameOffset.frameType,2):uint()
+    local frameType4 = buffer(frameOffset.frameType,4):le_uint()
     debugPrint ("frameType: "..frameType)
     if frameType == frameTypes.BEACON then
         -- this is a beacon, so iterate through tags
@@ -418,7 +431,7 @@ function findMessageOffset(buffer,len)
             if buffer(bp,1):uint() == 221 then -- vendor specific IE
                 -- check that ie oui is either parrot or ASD-STAN
                 if (buffer(bp+2,3):bytes():raw() == ouis.asdstan or buffer(bp+2,3):bytes():raw() == ouis.parrot) then
-                    if buffer(bp+5,1):uint() == 0x0d then
+                    if buffer(bp+5,1):uint() == frameType.ODID_APP_CODE then
                         -- we have a proper odid beacon frame
                         protoLen = buffer(bp+1,1):uint() - 4
                         return bp+6,protoLen
@@ -461,8 +474,35 @@ function findMessageOffset(buffer,len)
             debugPrint("Action frame, but not NAN")
             return 0,0
         end
+    elseif frameType4 == frameTypes.BT_ADV then
+        local btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND then
+            btAdvSubType = buffer(frameOffset.frameType+13,1):uint()
+            if btAdvSubType == frameTypes.BT_SVC_DATA_TYPE then
+                btAdvUUID = buffer(frameOffset.frameType+14,2):le_uint()
+                if btAdvUUID == frameTypes.ASTM_UUID then
+                    odid_app_code = buffer(frameOffset.frameType+16,1):uint()
+                    btAdvLen = buffer(frameOffset.frameType+12,1):uint()
+                    if odid_app_code == frameTypes.ODID_APP_CODE then
+                        return frameOffset.frameType+17,btAdvLen - 4
+                    else
+                        debugPrint("ASTM ADV, but not ODID app code(0x0d)")
+                        return 0,0
+                    end
+                else
+                    debugPrint("BT SVC Data, but not ASTM(0xfffa)")
+                    return 0,0
+                end
+            else
+                debugPrint("BT ADV_NONCONN_IND, but not SVC_DATA_TYPE")
+                return 0,0
+            end
+        else
+            debugPrint("BT ADV, but not ADV_NONCONN_IND")
+            return 0,0
+        end
     else
-        debugPrint("Not beacon or Action Frame")
+        debugPrint("Not beacon, Action Frame, or BT ADV")
         return 0,0
     end
 end
@@ -470,7 +510,7 @@ end
 function odid_protocol.dissector(buffer, pinfo, tree)
 
     local length = buffer:len()
-    if length < 0x3c + 25 then 
+    if length < 0x21 + 25 then 
         debugPrint("too short")
         return 
     end
