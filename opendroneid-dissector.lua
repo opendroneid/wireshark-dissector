@@ -431,7 +431,7 @@ function findMessageOffset(buffer,len)
             if buffer(bp,1):uint() == 221 then -- vendor specific IE
                 -- check that ie oui is either parrot or ASD-STAN
                 if (buffer(bp+2,3):bytes():raw() == ouis.asdstan or buffer(bp+2,3):bytes():raw() == ouis.parrot) then
-                    if buffer(bp+5,1):uint() == frameType.ODID_APP_CODE then
+                    if buffer(bp+5,1):uint() == frameTypes.ODID_APP_CODE then
                         -- we have a proper odid beacon frame
                         protoLen = buffer(bp+1,1):uint() - 4
                         return bp+6,protoLen
@@ -537,7 +537,7 @@ function odid_protocol.dissector(buffer, pinfo, tree)
         local msgSize = buffer(start+2,1):int()
 
         for n=1,buffer(start+3,1):int() do
-            local msg_start = start+4
+            local msg_start = (start+4) + (n-1)*msgSize
             odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize)
         end
     else
