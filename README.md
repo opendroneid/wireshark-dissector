@@ -16,8 +16,11 @@ It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will
     2. Install "[Acrylic Wi-Fi Sniffer](https://www.acrylicwifi.com/en/downloads-free-license-wifi-wireless-network-software-tools/download-acrylic-wi-fi-sniffer/)" (trial)
     3. Run Acrylic Wi-Fi sniffer, and click "continue"
     4. Run Wireshark **as Administrator** (this is a must)
-    5. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface. (See bluetooth step 3 screenshot)
-    6. Many of the integrated Wi-Fi adapters will not support monitor mode (and therefore, will not work for this purpose), some USB adapters do.  A supported list can be found [here](https://www.acrylicwifi.com/en/wlan-wifi-wireless-network-software-tools/wifi-analyzer-acrylic-professional/requirements-and-compatibility/).
+    5. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface.
+    ![Wireshark Wi-Fi start](img/wifi_start.png)
+    6. Select Channel 6 and 20 Mhz on the next configuration dialog.
+    ![Wireshark Wi-Fi config](img/wifi_channel.png)    
+    7. Many of the integrated Wi-Fi adapters will not support monitor mode (and therefore, will not work for this purpose), some USB adapters do.  A supported list can be found [here](https://www.acrylicwifi.com/en/wlan-wifi-wireless-network-software-tools/wifi-analyzer-acrylic-professional/requirements-and-compatibility/).
     The ASUS USB-N13 (along with Acrylic Sniffer) was used for the screenshot below.
     ![Wireshark Wi-Fi Screenshot](img/screenshot.png)
 
