@@ -14,9 +14,11 @@ It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will
 2. Wi-Fi sniffing
     1. Open Drone ID over Wi-Fi works from broadcast frames without a connection to any specific network.  Therefore, it is necessary to get Wireshark to sniff using "monitor mode". If you have trouble getting it working directly with your installed Wi-Fi device and drivers, we have been able to get it to work by doing the following:
     2. Install "[Acrylic Wi-Fi Sniffer](https://www.acrylicwifi.com/en/downloads-free-license-wifi-wireless-network-software-tools/download-acrylic-wi-fi-sniffer/)" (trial)
-    3. Run Wireshark **as Administrator** (this is a must)
-    4. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface. (See bluetooth step 3 screenshot)
-    5. Many of the integrated Wi-Fi adapters will not support monitor mode, some USB adapters do.  The ASUS USB-N13 (along with Acrylic Sniffer) was used for the screenshot below.
+    3. Run Acrylic Wi-Fi sniffer, and click "continue"
+    4. Run Wireshark **as Administrator** (this is a must)
+    5. Click on "Config Gear" next to Acrylic Wi-Fi Sniffer interface. (See bluetooth step 3 screenshot)
+    6. Many of the integrated Wi-Fi adapters will not support monitor mode (and therefore, will not work for this purpose), some USB adapters do.  A supported list can be found [here](https://www.acrylicwifi.com/en/wlan-wifi-wireless-network-software-tools/wifi-analyzer-acrylic-professional/requirements-and-compatibility/).
+    The ASUS USB-N13 (along with Acrylic Sniffer) was used for the screenshot below.
     ![Wireshark Wi-Fi Screenshot](img/screenshot.png)
 
 3. Bluetooth Sniffing
