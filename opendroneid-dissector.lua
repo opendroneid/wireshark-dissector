@@ -396,12 +396,14 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
 end
 
 function findMessageOffset(buffer,len)
+    -- In Wireshark/Windows, this appears to be byte 0x11, in Linux, 0x12.
+    -- Either way, the offset value matches the length of the header.
+    local frameTypeOffset = buffer(2,1):uint()
     local frameOffset = {
-        frameType = 0x11,
-        -- beacon = 0x80, --NAN 0xd0
-        beaconTags = 0x35,
-        publicAction = 0x29,
-        nanSDA = 0x2f
+        frameType = frameTypeOffset, 
+        beaconTags = frameTypeOffset+0x24,
+        publicAction = frameTypeOffset+0x18,
+        nanSDA = frameTypeOffset+0x1e
     }
     local frameTypes = {
         BEACON = 0x8000,
