@@ -440,13 +440,15 @@ function findMessageOffset(buffer,len)
                     else
                         -- even though OUI matches, this is not ODID
                         debugPrint("VSIE match, OUI Match, no App Code Match")
-                        return 0,0
+                        bp = bp + buffer(bp+1,1):uint() + 2
+                        -- continue to next tag
                     end
                 else
                     -- even though this is a VSIE, it doesn't match a ODID OUI
                     debugPrint("VSIE match, no OUI match")
                     debugPrint(buffer(bp+2,3):bytes():raw())
-                    return 0,0
+                    bp = bp + buffer(bp+1,1):uint() + 2
+                    -- continue to next tag
                 end
             else
                 -- skip to next tag
