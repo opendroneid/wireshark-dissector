@@ -425,11 +425,11 @@ function findMessageOffset(buffer,len)
     -- First, determine if Beacon or Action frame (reject otherwise)
     local frameType = buffer(frameOffset.frameType,2):uint()
     local frameType4 = buffer(frameOffset.frameType,4):le_uint()
-    debugPrint ("frameType: "..frameType)
+    debugPrint ("frameType: "..frameType..", len="..len)
     if frameType == frameTypes.BEACON then
         -- this is a beacon, so iterate through tags
         bp = frameOffset.beaconTags
-        while bp < len do
+        while bp < len-30 do -- If there's not at least 30 bytes left, there's no room for another RID message, so just stop looking
             if buffer(bp,1):uint() == 221 then -- vendor specific IE
                 -- check that ie oui is either parrot or ASD-STAN
                 if (buffer(bp+2,3):bytes():raw() == ouis.asdstan or buffer(bp+2,3):bytes():raw() == ouis.parrot) then
@@ -452,7 +452,7 @@ function findMessageOffset(buffer,len)
                 end
             else
                 -- skip to next tag
-                debugPrint ("tag bp="..bp..",type="..buffer(bp,1):uint()..", no VSIE(221) match")
+                debugPrint ("tag bp="..bp..",type="..buffer(bp,1):uint()..", len="..buffer(bp+1,1):uint()..", no VSIE(221) match")
                 bp = bp + buffer(bp+1,1):uint() + 2
             end
         end
