@@ -23,6 +23,7 @@ local msgTypes = {
 local protoVersions = {
     [0]="F3411-19 (1.0)",
     [1]="F3411-20 (1.1)",
+    [2]="F3411-22 (2.0)",
     [15]="Reserved for Private Use"
 }
 
@@ -58,7 +59,8 @@ local statuses = {
     [0]="Undeclared",
     [1]="On Ground",
     [2]="Airborne",
-    [3]="Emergency"
+    [3]="Emergency",
+    [4]="Remote ID System Failure"
 }
 local heightTypes = {
     [0]="Above Takeoff",
@@ -145,7 +147,9 @@ local authTypes = {
     [15] = "Available for Private Use"    
 }
 local selfIDTypes = {
-    [0] = "Text description"
+    [0] = "Text Description",
+    [1] = "Emergency Description",
+    [2] = "Extended Status Description"
 }
 local classificationTypes = {
     [0] = "Undeclared",
@@ -159,8 +163,8 @@ local classificationTypes = {
 }
 local OperatorLocTypes = {
     [0] = "Take Off",
-    [1] = "Live GNSS",
-    [2] = "Fixed Location"
+    [1] = "Dynamic",
+    [2] = "Fixed"
 }
 local EUCats = {
     [0] = "Undefined",
@@ -207,7 +211,7 @@ odid_basicID_id_bin = ProtoField.bytes("OpenDroneID.basicID_id_bin", "ID", base.
 odid_basicID_reserved = ProtoField.bytes("OpenDroneID.basicID_reserved","Reserved",base.SPACE)
 
 -- Location/Vector Fields
-odid_loc_status = ProtoField.uint8("OpenDroneID.loc_status", "UAS Status", base.DEC, statuses, 0xf0)
+odid_loc_status = ProtoField.uint8("OpenDroneID.loc_status", "Operational Status", base.DEC, statuses, 0xf0)
 odid_loc_flags = ProtoField.uint8("OpenDroneID.loc_flags", "Flags", base.DEC, nil, 0x0f)
 
 odid_loc_flag_heightType = ProtoField.uint8("OpenDroneID.loc_flag_heightType", "Height Type", base.DEC, heightTypes, 0x04)
@@ -234,7 +238,7 @@ odid_loc_reserved = ProtoField.bytes("OpenDroneID.loc_reserved","Reserved",base.
 -- Authentication Fields
 odid_auth_type = ProtoField.uint8("OpenDroneID.auth_type","Auth Type",base.DEC,authTypes,0xf0)
 odid_auth_pageNumber = ProtoField.uint8("OpenDroneID.auth_pageNumber","Page Number",base.DEC,nil,0x0f)
-odid_auth_pageCount = ProtoField.uint8("OpenDroneID.auth_pageCount","Page Count",base.DEC)
+odid_auth_lastPageIndex = ProtoField.uint8("OpenDroneID.auth_lastPageIndex","Last Page Index",base.DEC)
 odid_auth_length = ProtoField.uint8("OpenDroneID.auth_length","Length",base.DEC)
 odid_auth_timeStamp = ProtoField.uint32("OpenDroneID.auth_timeStamp","Time Stamp",base.DEC)
 odid_auth_data = ProtoField.bytes("OpenDroneID.auth_data", "Auth Data", base.SPACE)
@@ -257,6 +261,7 @@ odid_system_uaClass = ProtoField.uint8("OpenDroneID.system_usClass","UA Classifi
 odid_system_uaClassEUCat = ProtoField.uint8("OpenDroneID.system_usClassEUCat","UA Classification Category",base.DEC,EUCats,0xf0)
 odid_system_uaClassEUClass = ProtoField.uint8("OpenDroneID.system_usClassEUCat","UA Classification Category",base.DEC,EUClasses,0x0f)
 odid_system_opGeoAlt = ProtoField.uint16("OpenDroneID.system_opGeoAlt","Operator Geodetic Alt",base.DEC)
+odid_system_timeStamp = ProtoField.uint32("OpenDroneID.system_timeStamp","Message Timestamp",base.DEC)
 odid_system_reserved = ProtoField.bytes("OpenDroneID.system_reserved","Reserved",base.SPACE)
 
 -- Operator ID Fields
@@ -276,13 +281,13 @@ odid_protocol.fields = {
     odid_loc_baroAccuracy, odid_loc_speedAccuracy, odid_loc_timeStamp, odid_loc_tsReserved, odid_loc_tsAccuracy,
     odid_loc_reserved,
 
-    odid_auth_type, odid_auth_pageNumber, odid_auth_pageCount, odid_auth_length, odid_auth_timeStamp, odid_auth_data,
+    odid_auth_type, odid_auth_pageNumber, odid_auth_lastPageIndex, odid_auth_length, odid_auth_timeStamp, odid_auth_data,
 
     odid_self_type, odid_self_desc,
 
     odid_system_flags, odid_system_flag_class, odid_system_flag_locType, odid_system_lat, odid_system_lon, 
     odid_system_areaCount, odid_system_areaRadius, odid_system_areaCeiling, odid_system_areaFloor, odid_system_uaClass, 
-    odid_system_uaClassEUCat,odid_system_uaClassEUClass, odid_system_opGeoAlt, odid_system_reserved,
+    odid_system_uaClassEUCat,odid_system_uaClassEUClass, odid_system_opGeoAlt, odid_system_timeStamp, odid_system_reserved,
 
     odid_operator_type, odid_operator_id, odid_operator_reserved
 }
@@ -341,7 +346,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_auth_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_auth_pageNumber, buffer(msg_start+1,1))
         if bit32.extract(buffer(msg_start+1,1):uint(),0,4) == 0 then
-            subsub[treeIndex]:add_le(odid_auth_pageCount, buffer(msg_start+2,1))
+            subsub[treeIndex]:add_le(odid_auth_lastPageIndex, buffer(msg_start+2,1))
             subsub[treeIndex]:add_le(odid_auth_length, buffer(msg_start+3,1))
             subsub[treeIndex]:add_le(odid_auth_timeStamp, buffer(msg_start+4,4))
             subsub[treeIndex]:add_le(odid_auth_data, buffer(msg_start+8,17))
@@ -374,7 +379,8 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
             subsub[treeIndex]:add_le(odid_system_uaClass, buffer(msg_start+17,1))
         end
         subsub[treeIndex]:add_le(odid_system_opGeoAlt, buffer(msg_start+18,2))
-        subsub[treeIndex]:add_le(odid_system_reserved, buffer(msg_start+20,5))
+        subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4))
+        subsub[treeIndex]:add_le(odid_system_reserved, buffer(msg_start+24,1))
     elseif subMsgType == 5 then 
         subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Operator ID Message (5)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
