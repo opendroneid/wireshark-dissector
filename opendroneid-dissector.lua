@@ -2,7 +2,7 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
-debugMode = 0
+debugMode = 1
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 
@@ -293,7 +293,7 @@ odid_protocol.fields = {
 }
 
 function debugPrint(pstring)
-    if debugMode == 1 then
+    if debugMode == 1 and pstring != nil then
         print(pstring)
     end
 end
@@ -405,6 +405,11 @@ function findMessageOffset(buffer,len)
     -- In Wireshark/Windows, this appears to be byte 0x11, in Linux, 0x12.
     -- Either way, the offset value matches the length of the header.
     local frameTypeOffset = buffer(2,1):uint()
+    
+    if frameTypeOffset == 0 and buffer(1,2):le_uint() == 56 then -- bluetooth nRF capture signature
+        frameTypeOffset = 0x11
+    end
+    
     local frameOffset = {
         frameType = frameTypeOffset, 
         beaconTags = frameTypeOffset+0x24,
@@ -431,7 +436,7 @@ function findMessageOffset(buffer,len)
     -- First, determine if Beacon or Action frame (reject otherwise)
     local frameType = buffer(frameOffset.frameType,2):uint()
     local frameType4 = buffer(frameOffset.frameType,4):le_uint()
-    debugPrint ("frameType: "..frameType..", len="..len)
+    debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", len="..len)
     if frameType == frameTypes.BEACON then
         -- this is a beacon, so iterate through tags
         bp = frameOffset.beaconTags
@@ -512,7 +517,7 @@ function findMessageOffset(buffer,len)
             return 0,0
         end
     else
-        debugPrint("Not beacon, Action Frame, or BT ADV")
+        debugPrint("Not beacon, Action Frame, or BT ADV, frametype="..frameType..", frameType4="..frameType4.."("..string.format("0x%x",frameType4)..")")
         return 0,0
     end
 end
