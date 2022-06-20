@@ -2,7 +2,7 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
-debugMode = 1
+debugMode = 0
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 
