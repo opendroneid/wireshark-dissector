@@ -293,7 +293,7 @@ odid_protocol.fields = {
 }
 
 function debugPrint(pstring)
-    if debugMode == 1 and pstring != nil then
+    if debugMode == 1 and pstring ~= nil then
         print(pstring)
     end
 end
