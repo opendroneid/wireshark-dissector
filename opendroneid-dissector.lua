@@ -2,7 +2,7 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
-debugMode = 0
+debugMode = 1
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 
@@ -402,20 +402,6 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
 end
 
 function findMessageOffset(buffer,len)
-    -- In Wireshark/Windows, this appears to be byte 0x11, in Linux, 0x12.
-    -- Either way, the offset value matches the length of the header.
-    local frameTypeOffset = buffer(2,1):uint()
-    
-    if frameTypeOffset == 0 and buffer(1,2):le_uint() == 56 then -- bluetooth nRF capture signature
-        frameTypeOffset = 0x11
-    end
-    
-    local frameOffset = {
-        frameType = frameTypeOffset, 
-        beaconTags = frameTypeOffset+0x24,
-        publicAction = frameTypeOffset+0x18,
-        nanSDA = frameTypeOffset+0x1e
-    }
     local frameTypes = {
         BEACON = 0x8000,
         ACTION = 0xd000,
@@ -423,8 +409,50 @@ function findMessageOffset(buffer,len)
         BT_ADV_NONCONN_IND = 0x2,
         BT_ADV_SCAN_IND = 0x6,
         BT_SVC_DATA_TYPE = 0x16,
+        BT_AUX_ADV_IND = 0x07,
         ASTM_UUID = 0xfffa,
         ODID_APP_CODE = 0x0d
+    }
+    -- In Wireshark/Windows, this appears to be byte 0x11, in Linux, 0x12.
+    -- Either way, the offset value matches the length of the header.
+    local frameTypeOffset = buffer(2,1):uint()
+    local btFrameTypeOffset = 0
+
+    local frameOffsetBle = {
+        btAdvType = 4,
+        btAdvLen = 12,
+        btAdvSubType = 13,
+        btAdvUUID = 14,
+        odid_app_code = 16,
+        odid_start = 17,
+    }
+
+    if frameTypeOffset == 0 and buffer(1,2):le_uint() == 56 then -- bluetooth nRF capture signature
+        debugPrint ("BL")
+        frameTypeOffset = 0x11
+    end
+
+    if len == 56 then -- bluetooth nRF capture signature
+        debugPrint ("BLE")
+        frameTypeOffset = 10
+    end
+
+    if frameTypeOffset == 128 and buffer(4,4):le_uint() == frameTypes.BT_ADV then -- bluetooth nRF capture signature
+        debugPrint ("BLE-LL")
+        frameTypeOffset = 10
+        frameOffsetBle.btAdvType = 5
+        frameOffsetBle.btAdvLen = 17
+        frameOffsetBle.btAdvSubType = 18
+        frameOffsetBle.btAdvUUID = 19
+        frameOffsetBle.odid_app_code = 21
+        frameOffsetBle.odid_start = 22
+    end
+    
+    local frameOffset = {
+        frameType = frameTypeOffset,
+        beaconTags = frameTypeOffset+0x24,
+        publicAction = frameTypeOffset+0x18,
+        nanSDA = frameTypeOffset+0x1e
     }
     local ouis = {
         parrot    = string.char(0x90,0x3a,0xe6),
@@ -490,30 +518,31 @@ function findMessageOffset(buffer,len)
             return 0,0
         end
     elseif frameType4 == frameTypes.BT_ADV then
-        local btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
-        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND then
-            btAdvSubType = buffer(frameOffset.frameType+13,1):uint()
+        local btAdvType = bit32.extract(buffer(frameTypeOffset + frameOffsetBle.btAdvType,1):uint(),0,4)
+        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND then
+            btAdvSubType = buffer(frameTypeOffset + frameOffsetBle.btAdvSubType,1):uint()
             if btAdvSubType == frameTypes.BT_SVC_DATA_TYPE then
-                btAdvUUID = buffer(frameOffset.frameType+14,2):le_uint()
+                btAdvUUID = buffer(frameTypeOffset + frameOffsetBle.btAdvUUID,2):le_uint()
                 if btAdvUUID == frameTypes.ASTM_UUID then
-                    odid_app_code = buffer(frameOffset.frameType+16,1):uint()
-                    btAdvLen = buffer(frameOffset.frameType+12,1):uint()
+                    odid_app_code = buffer(frameTypeOffset + frameOffsetBle.odid_app_code,1):uint()
+                    btAdvLen = buffer(frameTypeOffset + frameOffsetBle.btAdvLen,1):uint()
                     if odid_app_code == frameTypes.ODID_APP_CODE then
-                        return frameOffset.frameType+17,btAdvLen - 4
+                        debugPrint("FOUND VALID AT "..odid_app_code.." with len "..btAdvLen)
+                        return frameTypeOffset + frameOffsetBle.odid_start,btAdvLen - 4
                     else
-                        debugPrint("ASTM ADV, but not ODID app code(0x0d)")
+                        debugPrint("ASTM ADV, but not ODID app code(0x0d) "..odid_app_code)
                         return 0,0
                     end
                 else
-                    debugPrint("BT SVC Data, but not ASTM(0xfffa)")
+                    debugPrint("BT SVC Data, but not ASTM(0xfffa) "..btAdvUUID)
                     return 0,0
                 end
             else
-                debugPrint("BT ADV_NONCONN_IND, but not SVC_DATA_TYPE")
+                debugPrint("BT ADV_NONCONN_IND, but not SVC_DATA_TYPE "..btAdvSubType)
                 return 0,0
             end
         else
-            debugPrint("BT ADV, but not ADV_NONCONN_IND")
+            debugPrint("BT ADV, but not ADV_NONCONN_IND "..btAdvType)
             return 0,0
         end
     else
@@ -525,10 +554,11 @@ end
 function odid_protocol.dissector(buffer, pinfo, tree)
 
     local length = buffer:len()
-    if length < 0x21 + 25 then 
-        debugPrint("too short")
+    if length < 56 then
+        debugPrint("too short"..length)
         return 
     end
+    debugPrint("long enough"..length)
 
     start, protoLen = findMessageOffset(buffer,length)
     if start == 0 then
