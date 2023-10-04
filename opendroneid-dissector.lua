@@ -406,7 +406,7 @@ function findMessageOffset(buffer,len)
     -- Either way, the offset value matches the length of the header.
     local frameTypeOffset = buffer(2,1):uint()
     
-    if frameTypeOffset == 0 and buffer(1,2):le_uint() == 56 then -- bluetooth nRF capture signature
+    if buffer(0,1):uint() == 3 and buffer(3,1):uint() == 3 then -- bluetooth nRF capture signature
         frameTypeOffset = 0x11
     end
     
@@ -422,6 +422,7 @@ function findMessageOffset(buffer,len)
         BT_ADV = 0x8e89bed6,
         BT_ADV_NONCONN_IND = 0x2,
         BT_ADV_SCAN_IND = 0x6,
+		BT_AUX_ADV_IND = 0x7,
         BT_SVC_DATA_TYPE = 0x16,
         ASTM_UUID = 0xfffa,
         ODID_APP_CODE = 0x0d
@@ -450,7 +451,7 @@ function findMessageOffset(buffer,len)
                         return bp+6,protoLen
                     else
                         -- even though OUI matches, this is not ODID
-                        debugPrint("VSIE match, OUI Match, no App Code Match")
+                        debugPrint ("VSIE match, OUI Match, no App Code Match")
                         bp = bp + buffer(bp+1,1):uint() + 2
                         -- continue to next tag
                     end
@@ -490,16 +491,38 @@ function findMessageOffset(buffer,len)
             return 0,0
         end
     elseif frameType4 == frameTypes.BT_ADV then
-        local btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
-        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND then
-            btAdvSubType = buffer(frameOffset.frameType+13,1):uint()
+		local btOffsets = {
+			btAdvLen = frameOffset.frameType+12,
+			btAdvSubType = frameOffset.frameType+13,
+			btAdvUUID = frameOffset.frameType+14,
+			odid_app_code = frameOffset.frameType+16,
+			btMsg = frameOffset.frameType+17
+		}
+		local btAdvType
+		if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
+			-- Coded Phy, S=8 / BT5 Long Range
+			btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
+			local BT5_OFF_ADDER = 5
+			-- Add 5 bytes to each of the field offsets since BT5 has extra fields.
+			btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
+			btOffsets.btAdvSubType = btOffsets.btAdvSubType + BT5_OFF_ADDER
+			btOffsets.btAdvUUID = btOffsets.btAdvUUID + BT5_OFF_ADDER
+			btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
+			btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
+		else
+			-- BT4 Legacy
+			btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+		end
+        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND then
+            btAdvSubType = buffer(btOffsets.btAdvSubType,1):uint()
             if btAdvSubType == frameTypes.BT_SVC_DATA_TYPE then
-                btAdvUUID = buffer(frameOffset.frameType+14,2):le_uint()
+                btAdvUUID = buffer(btOffsets.btAdvUUID,2):le_uint()
                 if btAdvUUID == frameTypes.ASTM_UUID then
-                    odid_app_code = buffer(frameOffset.frameType+16,1):uint()
-                    btAdvLen = buffer(frameOffset.frameType+12,1):uint()
+                    odid_app_code = buffer(btOffsets.odid_app_code,1):uint()
+                    btAdvLen = buffer(btOffsets.btAdvLen,1):uint()
                     if odid_app_code == frameTypes.ODID_APP_CODE then
-                        return frameOffset.frameType+17,btAdvLen - 4
+						debugPrint("Find Message Offset = "..btOffsets.btMsg..", "..btAdvLen)
+                        return btOffsets.btMsg,btAdvLen - 4
                     else
                         debugPrint("ASTM ADV, but not ODID app code(0x0d)")
                         return 0,0
@@ -513,7 +536,7 @@ function findMessageOffset(buffer,len)
                 return 0,0
             end
         else
-            debugPrint("BT ADV, but not ADV_NONCONN_IND")
+            debugPrint("BT ADV, but not ADV_NONCONN_IND or AUX_ADV_IND")
             return 0,0
         end
     else
@@ -523,6 +546,8 @@ function findMessageOffset(buffer,len)
 end
 
 function odid_protocol.dissector(buffer, pinfo, tree)
+
+	debugPrint("debug on")
 
     local length = buffer:len()
     if length < 0x21 + 25 then 
