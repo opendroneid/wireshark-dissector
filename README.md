@@ -26,12 +26,15 @@ It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will
 
 3. Bluetooth Sniffing
     1.  Although one may be able to get an integrated hardware working, you may have better luck with some external bluetooth device that has already been proven for this purpose.
-    2. The [Nordic nRF52840 dongle](https://www.nordicsemi.com/Software-and-tools/Development-Kits/nRF52840-Dongle) was used to validate the dissector (BT4 only so far, we're not yet sure on its support of BT5 Long Range sniffing).  To get the dongle working, you must do the following:
+    2. The [Nordic nRF52840 dongle](https://www.nordicsemi.com/Software-and-tools/Development-Kits/nRF52840-Dongle) was used to validate the dissector with both BT4 (Legacy) and BT5 (LE Coded Phy) working.  To get the dongle working, you must do the following:
 
         1. Install [nRF Connect](https://www.nordicsemi.com/Software-and-tools/Development-Tools/nRF-Connect-for-desktop).
         2. Within nRF Connect, install the "Programmer" app.
         3. Download/Install nRF sniffer according to the Nordic [instructions](https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_sniffer_ble%2FUG%2Fsniffer_ble%2Fintro.html).
-    3. Once the BT sniffer is setup in Wireshark, be sure to start the sniffing process using the "config gear" icon and select "Advertisement Frames only" in the startup dialog (this will limit the noise).
+    3. Once the BT sniffer is setup in Wireshark, be sure to start the sniffing process using the "config gear" icon and select one of the following:
+		- For BT5 (LE Coded Phy): select "Scan and follow devices on LE Coded PHY".
         ![Wireshark BT Start](img/bt_start.png)
+		- For BT4 (Legacy): select "Only legacy advertising packets" in the startup dialog (this will limit the noise).
+        ![Wireshark BT Start](img/bt_start_legacy.png)
     4. Start Sniffing!
     ![Wireshark BT Screenshot](img/screenshot_bt.png)

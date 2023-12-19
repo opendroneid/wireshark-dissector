@@ -409,7 +409,10 @@ function findMessageOffset(buffer,len)
     if buffer(0,1):uint() == 3 and buffer(3,1):uint() == 3 then -- bluetooth nRF capture signature
         frameTypeOffset = 0x11
     end
-    
+    if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
+		debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
+		return 0,0
+	end
     local frameOffset = {
         frameType = frameTypeOffset, 
         beaconTags = frameTypeOffset+0x24,
@@ -550,8 +553,9 @@ function odid_protocol.dissector(buffer, pinfo, tree)
 	debugPrint("debug on")
 
     local length = buffer:len()
-    if length < 0x21 + 25 then 
-        debugPrint("too short")
+	local minLen = 0x21 + 25
+    if length < minLen then 
+        debugPrint("too short ("..length.." < "..minLen)
         return 
     end
 
