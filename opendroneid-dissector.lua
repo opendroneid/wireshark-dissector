@@ -5,6 +5,13 @@
 debugMode = 0
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
+odid_protocol_message_pack = Proto("OpenDroneID.message.pack",  "Open Drone ID (Message Pack)")
+odid_protocol_message_basicid = Proto("OpenDroneID.message.basicid",  "Open Drone ID (Basic ID Message)")
+odid_protocol_message_location = Proto("OpenDroneID.message.location",  "Open Drone ID (Location Message)")
+odid_protocol_message_authentication = Proto("OpenDroneID.message.authentication",  "Open Drone ID (Authentication Message)")
+odid_protocol_message_selfid = Proto("OpenDroneID.message.selfid",  "Open Drone ID (Self ID Message)")
+odid_protocol_message_system = Proto("OpenDroneID.message.system",  "Open Drone ID (System Message)")
+odid_protocol_message_operatorid = Proto("OpenDroneID.message.operatorid",  "Open Drone ID (Operator ID Message)")
 
 --
 -- ENUMERATIONS
@@ -303,7 +310,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
     debugPrint("subMsgType: "..subMsgType..", size:"..size)
     if subMsgType == 0 then
         local subMsgIDType = bit32.extract(buffer(msg_start+1,1):uint(),4,4)
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Basic ID Message (0)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_basicid,buffer(msg_start,size), "Open Drone ID - Basic ID Message (0)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_basicID_idType, buffer(msg_start+1,1))
@@ -315,7 +322,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         end
         subsub[treeIndex]:add_le(odid_basicID_reserved, buffer(msg_start+22,3))
     elseif subMsgType == 1 then
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Location/Vector Message (1)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_location,buffer(msg_start,size), "Open Drone ID - Location/Vector Message (1)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_loc_status, buffer(msg_start+1,1))
@@ -340,7 +347,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_loc_tsAccuracy, buffer(msg_start+23,1))
         subsub[treeIndex]:add_le(odid_loc_reserved, buffer(msg_start+24,1))
     elseif subMsgType == 2 then 
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Authentication Message (2)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_authentication,buffer(msg_start,size), "Open Drone ID - Authentication Message (2)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_auth_type, buffer(msg_start+1,1))
@@ -354,14 +361,14 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
             subsub[treeIndex]:add_le(odid_auth_data, buffer(msg_start+2,23))
         end
     elseif subMsgType == 3 then 
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Self-ID Message (3)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_selfid,buffer(msg_start,size), "Open Drone ID - Self-ID Message (3)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_self_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_self_desc, buffer(msg_start+2,23))
 
     elseif subMsgType == 4 then 
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - System Message (4)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_system,buffer(msg_start,size), "Open Drone ID - System Message (4)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_system_flag_class, buffer(msg_start+1,1))
@@ -382,14 +389,14 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4))
         subsub[treeIndex]:add_le(odid_system_reserved, buffer(msg_start+24,1))
     elseif subMsgType == 5 then 
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Operator ID Message (5)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_operatorid,buffer(msg_start,size), "Open Drone ID - Operator ID Message (5)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_operator_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_operator_id, buffer(msg_start+2,20))
         subsub[treeIndex]:add_le(odid_operator_reserved, buffer(msg_start+22,3))
     elseif subMsgType == 15 then
-        subsub[treeIndex] = subtree:add(odid_protocol,buffer(msg_start,size), "Open Drone ID - Message Pack (15)")
+        subsub[treeIndex] = subtree:add(odid_protocol_message_pack,buffer(msg_start,size), "Open Drone ID - Message Pack (15)")
         subsub[treeIndex]:add_le(odid_msgType,  buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion,  buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_msgPack_msgSize, buffer(msg_start+1,1))
