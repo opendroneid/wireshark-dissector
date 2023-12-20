@@ -32,7 +32,7 @@ It currently supports Wi-Fi Beacon, Wi-Fi NAN and Bluetooth 4.  Bluetooth 5 will
         2. Within nRF Connect, install the "Programmer" app.
         3. Download/Install nRF sniffer according to the Nordic [instructions](https://infocenter.nordicsemi.com/index.jsp?topic=%2Fug_sniffer_ble%2FUG%2Fsniffer_ble%2Fintro.html).
     3. Once the BT sniffer is setup in Wireshark, be sure to start the sniffing process using the "config gear" icon and select one of the following:
-		- For BT5 (LE Coded Phy): select "Scan and follow devices on LE Coded PHY".
+		- For BT5 (LE Coded Phy): select both "Find auxillary pointer data" and "Scan and follow devices on LE Coded PHY".
         ![Wireshark BT Start](img/bt_start.png)
 		- For BT4 (Legacy): select "Only legacy advertising packets" in the startup dialog (this will limit the noise).
         ![Wireshark BT Start](img/bt_start_legacy.png)
