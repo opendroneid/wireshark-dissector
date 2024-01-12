@@ -412,8 +412,8 @@ function findMessageOffset(buffer,len)
     -- In Wireshark/Windows, this appears to be byte 0x11, in Linux, 0x12.
     -- Either way, the offset value matches the length of the header.
     local frameTypeOffset = buffer(2,1):uint()
-    
-    if buffer(0,1):uint() == 3 and buffer(3,1):uint() == 3 then -- bluetooth nRF capture signature
+    -- FIX: buffer(0,1):uint() is "Com sequence(board)" in nordic_ble, is not always 3.
+    if buffer(3,1):uint() == 3 then -- bluetooth nRF capture signature
         frameTypeOffset = 0x11
     end
     if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
@@ -447,7 +447,7 @@ function findMessageOffset(buffer,len)
     -- First, determine if Beacon or Action frame (reject otherwise)
     local frameType = buffer(frameOffset.frameType,2):uint()
     local frameType4 = buffer(frameOffset.frameType,4):le_uint()
-    debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", len="..len)
+    debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", frameType4="..frameType4.."("..string.format("0x%x",frameType4).."), len="..len)
     if frameType == frameTypes.BEACON then
         -- this is a beacon, so iterate through tags
         bp = frameOffset.beaconTags
