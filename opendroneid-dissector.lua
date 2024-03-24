@@ -3,6 +3,7 @@
 -- License: apache-2.0
 
 debugMode = 0
+showTOALag = 1
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 odid_protocol_message_pack = Proto("OpenDroneID.message.pack",  "Open Drone ID (Message Pack)")
@@ -239,7 +240,7 @@ odid_loc_baroAccuracy = ProtoField.uint8("OpenDroneID.loc_baroAccuracy","Baro Ac
 odid_loc_speedAccuracy = ProtoField.uint8("OpenDroneID.loc_speedAccuracy","Speed Accuracy",base.DEC, speedAccuracies,0x0f)
 odid_loc_timeStamp = ProtoField.uint16("OpenDroneID.loc_timeStamp","Timestamp (1/10s since hour)",base.DEC)
 odid_loc_tsReserved = ProtoField.uint8("OpenDroneID.loc_tsReserved","Reserved",base.DEC,{},0xf0)
-odid_loc_tsAccuracy = ProtoField.uint8("OpenDroneID.loc_tsAccuracy","Timestamp Accuracy",base.DEC,{},0x0f)
+odid_loc_tsAccuracy = ProtoField.uint8("OpenDroneID.loc_tsAccuracy","Timestamp Accuracy (1/10s)",base.DEC,nil,0x0f)
 odid_loc_reserved = ProtoField.bytes("OpenDroneID.loc_reserved","Reserved",base.SPACE)
 
 -- Authentication Fields
@@ -299,13 +300,48 @@ odid_protocol.fields = {
     odid_operator_type, odid_operator_id, odid_operator_reserved
 }
 
+function dump(o)
+   if type(o) == 'table' then
+      local s = '{ '
+      for k,v in pairs(o) do
+         if type(k) ~= 'number' then k = '"'..k..'"' end
+         s = s .. '['..k..'] = ' .. dump(v) .. ','
+      end
+      return s .. '} '
+   else
+      return tostring(o)
+   end
+end
+
+-- find lag time based on rx time and 10ths of seconds since the hour tx time
+function timeDelta10(rxTime,txHour10)
+    local rxTimeParts = os.date("*t",rxTime)
+    local rxFracTime = rxTime-math.floor(rxTime) -- fractional time
+    -- note: this is rounding the difference down to significant digits. 
+    -- Since the fractional tenth of second is unknown (could be 0.09)
+    -- rounding down is used to give the benefit of doubt.
+    rxHour10=(rxTimeParts["min"]*60+rxTimeParts["sec"])*10+math.floor(rxFracTime*10)
+    local diff10 = rxHour10-txHour10
+    return "Timestamp (1/10s since the hour): "..txHour10.." (lag: "..string.format("%.1f",diff10/10).."s)"
+end
+
+-- find lag time between UTC timestamp and rx time
+function timeDelta(pkTime, txTime)
+    local txTimeAdj = txTime+1546300800 -- adjust for 00:00:00, 1/1/2019 epoch
+    local diffTime = math.floor(pkTime) - txTime
+    -- note: this is rounding the difference down to significant digits. 
+    -- Since the fractional portion of the tx second is unknown (could be 0.9)
+    -- rounding down is used to give the benefit of doubt.
+    return "Message Timestamp: "..(txTime).." (lag: "..(math.floor(diffTime)).."s)" 
+end
+
 function debugPrint(pstring)
     if debugMode == 1 and pstring ~= nil then
         print(pstring)
     end
 end
 
-function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
+function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
     subMsgType =  bit32.extract(buffer(msg_start,1):int(),4,4)
     debugPrint("subMsgType: "..subMsgType..", size:"..size)
     if subMsgType == 0 then
@@ -342,7 +378,11 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_loc_vAccuracy, buffer(msg_start+19,1))
         subsub[treeIndex]:add_le(odid_loc_baroAccuracy, buffer(msg_start+20,1))
         subsub[treeIndex]:add_le(odid_loc_speedAccuracy, buffer(msg_start+20,1))
-        subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2))
+        if showTOALag == 1 then
+            subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2),100,timeDelta10(pktTime,buffer(msg_start+21,2):le_uint()))
+        else
+            subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2))
+        end
         subsub[treeIndex]:add_le(odid_loc_tsReserved, buffer(msg_start+23,1))
         subsub[treeIndex]:add_le(odid_loc_tsAccuracy, buffer(msg_start+23,1))
         subsub[treeIndex]:add_le(odid_loc_reserved, buffer(msg_start+24,1))
@@ -366,7 +406,6 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_self_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_self_desc, buffer(msg_start+2,23))
-
     elseif subMsgType == 4 then 
         subsub[treeIndex] = subtree:add(odid_protocol_message_system,buffer(msg_start,size), "Open Drone ID - System Message (4)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
@@ -386,7 +425,11 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size)
             subsub[treeIndex]:add_le(odid_system_uaClass, buffer(msg_start+17,1))
         end
         subsub[treeIndex]:add_le(odid_system_opGeoAlt, buffer(msg_start+18,2))
-        subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4))
+        if showTOALag == 1 then
+            subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4),100,timeDelta(pktTime,buffer(msg_start+20,4):le_uint()))
+        else
+            subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4))
+        end
         subsub[treeIndex]:add_le(odid_system_reserved, buffer(msg_start+24,1))
     elseif subMsgType == 5 then 
         subsub[treeIndex] = subtree:add(odid_protocol_message_operatorid,buffer(msg_start,size), "Open Drone ID - Operator ID Message (5)")
@@ -417,9 +460,9 @@ function findMessageOffset(buffer,len)
         frameTypeOffset = 0x11
     end
     if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
-		debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
-		return 0,0
-	end
+        debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
+        return 0,0
+    end
     local frameOffset = {
         frameType = frameTypeOffset, 
         beaconTags = frameTypeOffset+0x24,
@@ -432,7 +475,7 @@ function findMessageOffset(buffer,len)
         BT_ADV = 0x8e89bed6,
         BT_ADV_NONCONN_IND = 0x2,
         BT_ADV_SCAN_IND = 0x6,
-		BT_AUX_ADV_IND = 0x7,
+        BT_AUX_ADV_IND = 0x7,
         BT_SVC_DATA_TYPE = 0x16,
         ASTM_UUID = 0xfffa,
         ODID_APP_CODE = 0x0d
@@ -501,28 +544,28 @@ function findMessageOffset(buffer,len)
             return 0,0
         end
     elseif frameType4 == frameTypes.BT_ADV then
-		local btOffsets = {
-			btAdvLen = frameOffset.frameType+12,
-			btAdvSubType = frameOffset.frameType+13,
-			btAdvUUID = frameOffset.frameType+14,
-			odid_app_code = frameOffset.frameType+16,
-			btMsg = frameOffset.frameType+17
-		}
-		local btAdvType
-		if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
-			-- Coded Phy, S=8 / BT5 Long Range
-			btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
-			local BT5_OFF_ADDER = 5
-			-- Add 5 bytes to each of the field offsets since BT5 has extra fields.
-			btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
-			btOffsets.btAdvSubType = btOffsets.btAdvSubType + BT5_OFF_ADDER
-			btOffsets.btAdvUUID = btOffsets.btAdvUUID + BT5_OFF_ADDER
-			btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
-			btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
-		else
-			-- BT4 Legacy
-			btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
-		end
+        local btOffsets = {
+            btAdvLen = frameOffset.frameType+12,
+            btAdvSubType = frameOffset.frameType+13,
+            btAdvUUID = frameOffset.frameType+14,
+            odid_app_code = frameOffset.frameType+16,
+            btMsg = frameOffset.frameType+17
+        }
+        local btAdvType
+        if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
+            -- Coded Phy, S=8 / BT5 Long Range
+            btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
+            local BT5_OFF_ADDER = 5
+            -- Add 5 bytes to each of the field offsets since BT5 has extra fields.
+            btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
+            btOffsets.btAdvSubType = btOffsets.btAdvSubType + BT5_OFF_ADDER
+            btOffsets.btAdvUUID = btOffsets.btAdvUUID + BT5_OFF_ADDER
+            btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
+            btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
+        else
+            -- BT4 Legacy
+            btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+        end
         if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND then
             btAdvSubType = buffer(btOffsets.btAdvSubType,1):uint()
             if btAdvSubType == frameTypes.BT_SVC_DATA_TYPE then
@@ -531,7 +574,7 @@ function findMessageOffset(buffer,len)
                     odid_app_code = buffer(btOffsets.odid_app_code,1):uint()
                     btAdvLen = buffer(btOffsets.btAdvLen,1):uint()
                     if odid_app_code == frameTypes.ODID_APP_CODE then
-						debugPrint("Find Message Offset = "..btOffsets.btMsg..", "..btAdvLen)
+                        debugPrint("Find Message Offset = "..btOffsets.btMsg..", "..btAdvLen)
                         return btOffsets.btMsg,btAdvLen - 4
                     else
                         debugPrint("ASTM ADV, but not ODID app code(0x0d)")
@@ -557,10 +600,10 @@ end
 
 function odid_protocol.dissector(buffer, pinfo, tree)
 
-	debugPrint("debug on")
+    debugPrint("debug on")
 
     local length = buffer:len()
-	local minLen = 0x21 + 25
+    local minLen = 0x21 + 25
     if length < minLen then 
         debugPrint("too short ("..length.." < "..minLen)
         return 
@@ -584,16 +627,16 @@ function odid_protocol.dissector(buffer, pinfo, tree)
         local subMsgSize = buffer(start+2,1):int()
         local subMsgQty = buffer(start+3,1):int()
         debugPrint("subMsgSize: "..subMsgSize..", subMsgQty: "..subMsgQty)
-        odid_messageSubTree(buffer,subtree,start+1,0,subMsgSize*subMsgQty+3)
+        odid_messageSubTree(buffer,subtree,start+1,0,subMsgSize*subMsgQty+3,pinfo.abs_ts)
         local msgSize = buffer(start+2,1):int()
 
         for n=1,buffer(start+3,1):int() do
             local msg_start = (start+4) + (n-1)*msgSize
-            odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize)
+            odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize,pinfo.abs_ts)
         end
     else
         msgSize=25
-        odid_messageSubTree(buffer,subtree,start+1,0,msgSize)
+        odid_messageSubTree(buffer,subtree,start+1,0,msgSize,pinfo.abs_ts)
     end
 end
 --local vend_specific_oui = DissectorTable.get("wlan.tag.oui")
@@ -601,10 +644,10 @@ end
 --wlan_pkt_type:add(wtap_encaps["IEEE_802_11_RADIOTAP"], odid_protocol)
 --vend_specific_oui:add(0x903ae6, odid_protocol) -- parrot
 --vend_specific_oui:add(0xfa0bbc, odid_protocol) -- ASD-STAN
---	["IEEE_802_11"] = 20,
---	["IEEE_802_11_PRISM"] = 21,
---	["IEEE_802_11_WITH_RADIO"] = 22,
---	["IEEE_802_11_RADIOTAP"] = 23,
+--  ["IEEE_802_11"] = 20,
+--  ["IEEE_802_11_PRISM"] = 21,
+--  ["IEEE_802_11_WITH_RADIO"] = 22,
+--  ["IEEE_802_11_RADIOTAP"] = 23,
 dis = DissectorTable.get("wtap_encap")
 dis:add(wtap_encaps["IEEE_802_11"],odid_protocol)
 register_postdissector(odid_protocol)
