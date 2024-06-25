@@ -228,7 +228,7 @@ odid_loc_flag_speedMultiplier = ProtoField.uint8("OpenDroneID.loc_flag_speedMult
 
 odid_loc_direction = ProtoField.uint8("OpenDroneID.loc_direction", "Direction", base.DEC,nil,nil,"desc")
 odid_loc_speed = ProtoField.uint8("OpenDroneID.loc_speed", "Speed", base.DEC)
-odid_loc_vspeed = ProtoField.uint8("OpenDroneID.loc_vspeed", "Vert Speed", base.DEC)
+odid_loc_vspeed = ProtoField.int8("OpenDroneID.loc_vspeed", "Vert Speed", base.DEC)
 odid_loc_lat = ProtoField.int32("OpenDroneID.loc_lat", "UA Lattitude", base.DEC)
 odid_loc_lon = ProtoField.int32("OpenDroneID.loc_lon", "UA Longitude", base.DEC)
 odid_loc_pressAlt = ProtoField.uint16("OpenDroneID.loc_pressAlt","UA Pressure Altitude", base.DEC)
