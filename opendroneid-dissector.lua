@@ -469,6 +469,8 @@ function findMessageOffset(buffer,len)
     -- FIX: buffer(0,1):uint() is "Com sequence(board)" in nordic_ble, is not always 3.
     if buffer(3,1):uint() == 3 then -- bluetooth nRF capture signature
         frameTypeOffset = 0x11
+    elseif buffer(4,4):le_uint() == 0x8E89BED6 then -- LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR
+        frameTypeOffset = 0x0A
     end
     if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
         debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
