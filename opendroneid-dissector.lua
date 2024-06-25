@@ -309,7 +309,7 @@ function dump(o)
       end
       return s .. '} '
    else
-      return tostring(o)
+      return type(o)..": "..tostring(o)
    end
 end
 
@@ -325,10 +325,21 @@ function timeDelta10(rxTime,txHour10)
     return "Timestamp (1/10s since the hour): "..txHour10.." (lag: "..string.format("%.1f",diff10/10).."s)"
 end
 
+function timeDelta10v(rxTime,txHour10)
+    local rxTimeParts = os.date("*t",rxTime)
+    local rxFracTime = rxTime-math.floor(rxTime) -- fractional time
+    -- note: this is rounding the difference down to significant digits. 
+    -- Since the fractional tenth of second is unknown (could be 0.09)
+    -- rounding down is used to give the benefit of doubt.
+    rxHour10=(rxTimeParts["min"]*60+rxTimeParts["sec"])*10+math.floor(rxFracTime*10)
+    local diff10 = rxHour10-txHour10
+    return diff10
+end
+
 -- find lag time between UTC timestamp and rx time
-function timeDelta(pkTime, txTime)
+function timeDelta(rxTime, txTime)
     local txTimeAdj = txTime+1546300800 -- adjust for 00:00:00, 1/1/2019 epoch
-    local diffTime = math.floor(pkTime) - txTime
+    local diffTime = math.floor(rxTime) - txTimeAdj
     -- note: this is rounding the difference down to significant digits. 
     -- Since the fractional portion of the tx second is unknown (could be 0.9)
     -- rounding down is used to give the benefit of doubt.
@@ -379,7 +390,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         subsub[treeIndex]:add_le(odid_loc_baroAccuracy, buffer(msg_start+20,1))
         subsub[treeIndex]:add_le(odid_loc_speedAccuracy, buffer(msg_start+20,1))
         if showTOALag == 1 then
-            subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2),100,timeDelta10(pktTime,buffer(msg_start+21,2):le_uint()))
+            subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2),timeDelta10v(pktTime,buffer(msg_start+21,2):le_uint()),timeDelta10(pktTime,buffer(msg_start+21,2):le_uint()))
         else
             subsub[treeIndex]:add_le(odid_loc_timeStamp, buffer(msg_start+21,2))
         end
@@ -426,7 +437,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         end
         subsub[treeIndex]:add_le(odid_system_opGeoAlt, buffer(msg_start+18,2))
         if showTOALag == 1 then
-            subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4),100,timeDelta(pktTime,buffer(msg_start+20,4):le_uint()))
+            subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4),buffer(msg_start+20,4):le_uint(),timeDelta(pktTime,buffer(msg_start+20,4):le_uint()))
         else
             subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4))
         end
@@ -621,12 +632,13 @@ function odid_protocol.dissector(buffer, pinfo, tree)
     subsub={}
     pinfo.cols.protocol = odid_protocol.name
     subtree = tree:add(odid_protocol, buffer(start,protoLen), "Open Drone ID")
-    subtree:add_le(odid_counter,  buffer(start+0,1))
+    subtree:add_le(odid_counter, buffer(start+0,1))
 
     if msgType == 15 then
         local subMsgSize = buffer(start+2,1):int()
         local subMsgQty = buffer(start+3,1):int()
         debugPrint("subMsgSize: "..subMsgSize..", subMsgQty: "..subMsgQty)
+        debugPrint("src addr: ".. tostring(pinfo.net_src))
         odid_messageSubTree(buffer,subtree,start+1,0,subMsgSize*subMsgQty+3,pinfo.abs_ts)
         local msgSize = buffer(start+2,1):int()
 
