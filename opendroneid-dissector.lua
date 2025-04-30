@@ -2,7 +2,7 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
-debugMode = 0
+debugMode = 1
 showTOALag = 1
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
@@ -200,7 +200,7 @@ local operatorIDTypes = {
 
 -- Frame Fields
 odid_app_code    = ProtoField.uint8("OpenDroneID.appCode", "App Code", base.DEC_HEX)
-odid_counter     = ProtoField.uint8("OpenDroneID.counter", "Message Counter", base.DEC_HEX)
+odid_counter     = ProtoField.uint8("OpenDroneID.counter", "Message Counter", base.DEC)
 
 -- Header Fields
 odid_msgType     = ProtoField.uint8("OpenDroneID.msgType", "Message Type", base.DEC_HEX,msgTypes,0xf0)
@@ -471,6 +471,8 @@ function findMessageOffset(buffer,len)
         frameTypeOffset = 0x11
     elseif buffer(4,4):le_uint() == 0x8E89BED6 then -- LINKTYPE_BLUETOOTH_LE_LL_WITH_PHDR
         frameTypeOffset = 0x0A
+	elseif buffer(0,2):uint() == 0x043e then -- Linux BT HCI
+		frameTypeOffset = 0x0
     end
     if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
         debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
@@ -491,7 +493,9 @@ function findMessageOffset(buffer,len)
         BT_AUX_ADV_IND = 0x7,
         BT_SVC_DATA_TYPE = 0x16,
         ASTM_UUID = 0xfffa,
-        ODID_APP_CODE = 0x0d
+        ODID_APP_CODE = 0x0d,
+		BT_HCI = 0x043e,
+		BT_LE_EXT = 0x0d
     }
     local ouis = {
         parrot    = string.char(0x90,0x3a,0xe6),
@@ -556,7 +560,7 @@ function findMessageOffset(buffer,len)
             debugPrint("Action frame, but not NAN")
             return 0,0
         end
-    elseif frameType4 == frameTypes.BT_ADV then
+    elseif frameType4 == frameTypes.BT_ADV or frameType == frameTypes.BT_HCI then
         local btOffsets = {
             btAdvLen = frameOffset.frameType+12,
             btAdvSubType = frameOffset.frameType+13,
@@ -565,21 +569,33 @@ function findMessageOffset(buffer,len)
             btMsg = frameOffset.frameType+17
         }
         local btAdvType
-        if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
-            -- Coded Phy, S=8 / BT5 Long Range
-            btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
-            local BT5_OFF_ADDER = 5
-            -- Add 5 bytes to each of the field offsets since BT5 has extra fields.
+		local BT5_OFF_ADDER = 0
+		if frameType == frameTypes.BT_HCI and buffer(3,1):uint() == frameTypes.BT_LE_EXT then
+			btAdvType = frameTypes.BT_LE_EXT
+			BT5_OFF_ADDER = 17
+			-- Add 18 bytes to each of the field offsets since BT5 has extra fields.
             btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
             btOffsets.btAdvSubType = btOffsets.btAdvSubType + BT5_OFF_ADDER
             btOffsets.btAdvUUID = btOffsets.btAdvUUID + BT5_OFF_ADDER
             btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
-            btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
-        else
-            -- BT4 Legacy
-            btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
-        end
-        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND then
+            btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER	
+		else
+			if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
+				-- Coded Phy, S=8 / BT5 Long Range
+				btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
+				BT5_OFF_ADDER = 5
+				-- Add 5 bytes to each of the field offsets since BT5 has extra fields.
+				btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
+				btOffsets.btAdvSubType = btOffsets.btAdvSubType + BT5_OFF_ADDER
+				btOffsets.btAdvUUID = btOffsets.btAdvUUID + BT5_OFF_ADDER
+				btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
+				btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
+			else
+				-- BT4 Legacy
+				btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+			end
+		end
+        if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND or btAdvType == frameTypes.BT_LE_EXT then
             btAdvSubType = buffer(btOffsets.btAdvSubType,1):uint()
             if btAdvSubType == frameTypes.BT_SVC_DATA_TYPE then
                 btAdvUUID = buffer(btOffsets.btAdvUUID,2):le_uint()
@@ -598,7 +614,7 @@ function findMessageOffset(buffer,len)
                     return 0,0
                 end
             else
-                debugPrint("BT ADV_NONCONN_IND, but not SVC_DATA_TYPE")
+                debugPrint("BT ADV_NONCONN_IND, but not SVC_DATA_TYPE, currently: "..btAdvSubType)
                 return 0,0
             end
         else
@@ -662,6 +678,7 @@ end
 --  ["IEEE_802_11_PRISM"] = 21,
 --  ["IEEE_802_11_WITH_RADIO"] = 22,
 --  ["IEEE_802_11_RADIOTAP"] = 23,
+debugPrint("debug mode on")
 dis = DissectorTable.get("wtap_encap")
 dis:add(wtap_encaps["IEEE_802_11"],odid_protocol)
 register_postdissector(odid_protocol)
