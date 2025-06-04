@@ -2,7 +2,7 @@
 -- Copyright 2021, Gabriel Cox
 -- License: apache-2.0
 
-debugMode = 1
+debugMode = 0
 showTOALag = 1
 
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
@@ -473,6 +473,8 @@ function findMessageOffset(buffer,len)
         frameTypeOffset = 0x0A
 	elseif buffer(0,2):uint() == 0x043e then -- Linux BT HCI
 		frameTypeOffset = 0x0
+	elseif buffer(28,2):uint() == 0x2b02 then -- USBCap (note, I'm unsure if this is the best signature, more testing needed)
+		frameTypeOffset = 0x1c -- 28
     end
     if frameTypeOffset > len - (25-4) then -- offset should at least be before freame
         debugPrint ("frameTypeOffset invalid ("..frameTypeOffset..") likely not BT or Wi-Fi frame")
@@ -495,6 +497,7 @@ function findMessageOffset(buffer,len)
         ASTM_UUID = 0xfffa,
         ODID_APP_CODE = 0x0d,
 		BT_HCI = 0x043e,
+		BT_USBCAP = 0x2b02, -- See USBCap note above.
 		BT_LE_EXT = 0x0d
     }
     local ouis = {
@@ -560,7 +563,7 @@ function findMessageOffset(buffer,len)
             debugPrint("Action frame, but not NAN")
             return 0,0
         end
-    elseif frameType4 == frameTypes.BT_ADV or frameType == frameTypes.BT_HCI then
+    elseif frameType4 == frameTypes.BT_ADV or frameType == frameTypes.BT_HCI or frameType == frameTypes.BT_USBCAP then
         local btOffsets = {
             btAdvLen = frameOffset.frameType+12,
             btAdvSubType = frameOffset.frameType+13,
@@ -592,7 +595,11 @@ function findMessageOffset(buffer,len)
 				btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER
 			else
 				-- BT4 Legacy
-				btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+				if frameType == frameTypes.BT_USBCAP then
+					btAdvType = frameTypes.BT_ADV_NONCONN_IND
+				else
+					btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+				end
 			end
 		end
         if btAdvType == frameTypes.BT_ADV_NONCONN_IND or btAdvType == frameTypes.BT_ADV_SCAN_IND or btAdvType == frameTypes.BT_AUX_ADV_IND or btAdvType == frameTypes.BT_LE_EXT then
