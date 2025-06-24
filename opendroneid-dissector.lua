@@ -5,6 +5,13 @@
 debugMode = 0
 showTOALag = 1
 
+-- As the BitOp library is bundled with all version of Wireshark, this extract
+-- function should be compatible across all Wireshark versions.
+function extract(value, start, width)
+    width = width or 1 -- Default width is 1 if not provided
+    return bit.band((bit.rshift(value,start)), ((bit.lshift(1,width))-1))
+end
+
 odid_protocol = Proto("OpenDroneID",  "Open Drone ID Protocol")
 odid_protocol_message_pack = Proto("OpenDroneID.message.pack",  "Open Drone ID (Message Pack)")
 odid_protocol_message_basicid = Proto("OpenDroneID.message.basicid",  "Open Drone ID (Basic ID Message)")
@@ -353,10 +360,10 @@ function debugPrint(pstring)
 end
 
 function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
-    subMsgType =  bit32.extract(buffer(msg_start,1):int(),4,4)
+    subMsgType =  extract(buffer(msg_start,1):int(),4,4)
     debugPrint("subMsgType: "..subMsgType..", size:"..size)
     if subMsgType == 0 then
-        local subMsgIDType = bit32.extract(buffer(msg_start+1,1):uint(),4,4)
+        local subMsgIDType = extract(buffer(msg_start+1,1):uint(),4,4)
         subsub[treeIndex] = subtree:add(odid_protocol_message_basicid,buffer(msg_start,size), "Open Drone ID - Basic ID Message (0)")
         subsub[treeIndex]:add_le(odid_msgType, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
@@ -403,7 +410,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_auth_type, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_auth_pageNumber, buffer(msg_start+1,1))
-        if bit32.extract(buffer(msg_start+1,1):uint(),0,4) == 0 then
+        if extract(buffer(msg_start+1,1):uint(),0,4) == 0 then
             subsub[treeIndex]:add_le(odid_auth_lastPageIndex, buffer(msg_start+2,1))
             subsub[treeIndex]:add_le(odid_auth_length, buffer(msg_start+3,1))
             subsub[treeIndex]:add_le(odid_auth_timeStamp, buffer(msg_start+4,4))
@@ -429,7 +436,7 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         subsub[treeIndex]:add_le(odid_system_areaRadius, buffer(msg_start+12,1))
         subsub[treeIndex]:add_le(odid_system_areaCeiling, buffer(msg_start+13,2))
         subsub[treeIndex]:add_le(odid_system_areaFloor, buffer(msg_start+15,2))
-        if bit32.extract(buffer(msg_start+1,1):uint(),2,2) == 1 then
+        if extract(buffer(msg_start+1,1):uint(),2,2) == 1 then
             subsub[treeIndex]:add_le(odid_system_uaClassEUCat, buffer(msg_start+17,1))
             subsub[treeIndex]:add_le(odid_system_uaClassEUClass, buffer(msg_start+17,1))
         else
@@ -583,9 +590,9 @@ function findMessageOffset(buffer,len)
             btOffsets.odid_app_code = btOffsets.odid_app_code + BT5_OFF_ADDER
             btOffsets.btMsg = btOffsets.btMsg + BT5_OFF_ADDER	
 		else
-			if bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
+			if extract(buffer(frameOffset.frameType+4,1):uint(),0,4) == 0 then
 				-- Coded Phy, S=8 / BT5 Long Range
-				btAdvType = bit32.extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
+				btAdvType = extract(buffer(frameOffset.frameType+5,1):uint(),0,4)
 				BT5_OFF_ADDER = 5
 				-- Add 5 bytes to each of the field offsets since BT5 has extra fields.
 				btOffsets.btAdvLen = btOffsets.btAdvLen + BT5_OFF_ADDER
@@ -598,7 +605,7 @@ function findMessageOffset(buffer,len)
 				if frameType == frameTypes.BT_USBCAP then
 					btAdvType = frameTypes.BT_ADV_NONCONN_IND
 				else
-					btAdvType = bit32.extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
+					btAdvType = extract(buffer(frameOffset.frameType+4,1):uint(),0,4)
 				end
 			end
 		end
@@ -652,7 +659,7 @@ function odid_protocol.dissector(buffer, pinfo, tree)
     end
 
     local msgTypeByte = buffer(start+1,1)
-    local msgType = bit32.extract(msgTypeByte:uint(),4,4)
+    local msgType = extract(msgTypeByte:uint(),4,4)
     debugPrint ("msgType1: "..msgType)
     subsub={}
     pinfo.cols.protocol = odid_protocol.name
