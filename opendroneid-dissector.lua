@@ -359,6 +359,71 @@ function debugPrint(pstring)
     end
 end
 
+-- decode raw latitude or longitude to deg
+function latlon_text(buf,latlon_unknown)
+    if latlon_unknown then
+        return " (Unknown)"
+    else
+        return string.format(" (%.7f deg)",buf:le_int()/1e7)
+    end
+end
+
+-- decode raw altitude to m and ft
+function alt_text(buf)
+    local value_m = (buf:le_uint()*0.5)-1000
+    if value_m == -1000 then
+        return " (Unknown)"
+    else
+        return string.format(" (%.1f m, %.1f ft)",value_m,value_m*3.28084)
+    end
+end
+
+-- decode raw vertical speed to m/s
+function vspeed_text(buf)
+    local value_mps = buf:le_int()*0.5
+    if value_mps == 63 then
+        return " (Unknown)"
+    else
+        return string.format(" (%.1f m/s)",value_mps)
+    end
+end
+
+-- decode raw area radius to meters
+function rad_text(buf)
+    local value_m = buf:le_uint()*10
+    return string.format(" (%.0f m)",value_m)
+end
+
+-- decode raw direction and east/west flag to degrees
+function dir_text(buf,flag_ewDirectionSegment)
+    local value_deg
+    if flag_ewDirectionSegment == 1 then
+        value_deg = buf:le_uint()+180
+    else
+        value_deg = buf:le_uint()
+    end
+    if value_deg == 361 then
+        return " (Unknown)"
+    else
+        return string.format(" (%.0f deg)",value_deg)
+    end
+end
+
+-- decode raw speed and multiplier flag to m/s
+function speed_text(buf,flag_speedMultiplier)
+    local speed_mps
+    if flag_speedMultiplier == 1 then
+        speed_mps = (buf:le_uint()*0.75)+(255*0.25)
+    else
+        speed_mps = buf:le_uint()*0.25
+    end
+    if speed_mps == 255 then
+        return " (Unknown)"
+    else
+        return string.format(" (%.2f m/s, %.2f kts)",speed_mps,speed_mps*1.94384)
+    end
+end
+
 function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
     subMsgType =  extract(buffer(msg_start,1):int(),4,4)
     debugPrint("subMsgType: "..subMsgType..", size:"..size)
@@ -384,14 +449,17 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         subsub[treeIndex]:add_le(odid_loc_flag_heightType, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_loc_flag_ewDirectionSegment, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_loc_flag_speedMultiplier, buffer(msg_start+1,1))
-        subsub[treeIndex]:add_le(odid_loc_direction, buffer(msg_start+2,1))
-        subsub[treeIndex]:add_le(odid_loc_speed, buffer(msg_start+3,1))
-        subsub[treeIndex]:add_le(odid_loc_vspeed, buffer(msg_start+4,1))
-        subsub[treeIndex]:add_le(odid_loc_lat, buffer(msg_start+5,4))
-        subsub[treeIndex]:add_le(odid_loc_lon, buffer(msg_start+9,4))
-        subsub[treeIndex]:add_le(odid_loc_pressAlt, buffer(msg_start+13,2))
-        subsub[treeIndex]:add_le(odid_loc_geoAlt, buffer(msg_start+15,2))
-        subsub[treeIndex]:add_le(odid_loc_height, buffer(msg_start+17,2))
+        local flag_ewDirectionSegment = extract(buffer(msg_start+1,1):uint(),1,1)
+        subsub[treeIndex]:add_le(odid_loc_direction, buffer(msg_start+2,1)):append_text(dir_text(buffer(msg_start+2,1),flag_ewDirectionSegment))
+        local flag_speedMultiplier = extract(buffer(msg_start+1,1):uint(),0,1)
+        subsub[treeIndex]:add_le(odid_loc_speed, buffer(msg_start+3,1)):append_text(speed_text(buffer(msg_start+3,1),flag_speedMultiplier))
+        subsub[treeIndex]:add_le(odid_loc_vspeed, buffer(msg_start+4,1)):append_text(vspeed_text(buffer(msg_start+4,1)))
+        local latlon_unknown = buffer(msg_start+5,4):int() == 0 and buffer(msg_start+9,4):int() == 0
+        subsub[treeIndex]:add_le(odid_loc_lat, buffer(msg_start+5,4)):append_text(latlon_text(buffer(msg_start+5,4),latlon_unknown))
+        subsub[treeIndex]:add_le(odid_loc_lon, buffer(msg_start+9,4)):append_text(latlon_text(buffer(msg_start+9,4),latlon_unknown))
+        subsub[treeIndex]:add_le(odid_loc_pressAlt, buffer(msg_start+13,2)):append_text(alt_text(buffer(msg_start+13,2)))
+        subsub[treeIndex]:add_le(odid_loc_geoAlt, buffer(msg_start+15,2)):append_text(alt_text(buffer(msg_start+15,2)))
+        subsub[treeIndex]:add_le(odid_loc_height, buffer(msg_start+17,2)):append_text(alt_text(buffer(msg_start+17,2)))
         subsub[treeIndex]:add_le(odid_loc_hAccuracy, buffer(msg_start+19,1))
         subsub[treeIndex]:add_le(odid_loc_vAccuracy, buffer(msg_start+19,1))
         subsub[treeIndex]:add_le(odid_loc_baroAccuracy, buffer(msg_start+20,1))
@@ -430,19 +498,20 @@ function odid_messageSubTree(buffer,subtree,msg_start,treeIndex,size,pktTime)
         subsub[treeIndex]:add_le(odid_protoVersion, buffer(msg_start+0,1))
         subsub[treeIndex]:add_le(odid_system_flag_class, buffer(msg_start+1,1))
         subsub[treeIndex]:add_le(odid_system_flag_locType, buffer(msg_start+1,1))
-        subsub[treeIndex]:add_le(odid_system_lat, buffer(msg_start+2,4))
-        subsub[treeIndex]:add_le(odid_system_lon, buffer(msg_start+6,4))
+        local latlon_unknown = buffer(msg_start+2,4):int() == 0 and buffer(msg_start+6,4):int() == 0
+        subsub[treeIndex]:add_le(odid_system_lat, buffer(msg_start+2,4)):append_text(latlon_text(buffer(msg_start+2,4),latlon_unknown))
+        subsub[treeIndex]:add_le(odid_system_lon, buffer(msg_start+6,4)):append_text(latlon_text(buffer(msg_start+6,4),latlon_unknown))
         subsub[treeIndex]:add_le(odid_system_areaCount, buffer(msg_start+10,2))
-        subsub[treeIndex]:add_le(odid_system_areaRadius, buffer(msg_start+12,1))
-        subsub[treeIndex]:add_le(odid_system_areaCeiling, buffer(msg_start+13,2))
-        subsub[treeIndex]:add_le(odid_system_areaFloor, buffer(msg_start+15,2))
+        subsub[treeIndex]:add_le(odid_system_areaRadius, buffer(msg_start+12,1)):append_text(rad_text(buffer(msg_start+12,1)))
+        subsub[treeIndex]:add_le(odid_system_areaCeiling, buffer(msg_start+13,2)):append_text(alt_text(buffer(msg_start+13,2)))
+        subsub[treeIndex]:add_le(odid_system_areaFloor, buffer(msg_start+15,2)):append_text(alt_text(buffer(msg_start+15,2)))
         if extract(buffer(msg_start+1,1):uint(),2,2) == 1 then
             subsub[treeIndex]:add_le(odid_system_uaClassEUCat, buffer(msg_start+17,1))
             subsub[treeIndex]:add_le(odid_system_uaClassEUClass, buffer(msg_start+17,1))
         else
             subsub[treeIndex]:add_le(odid_system_uaClass, buffer(msg_start+17,1))
         end
-        subsub[treeIndex]:add_le(odid_system_opGeoAlt, buffer(msg_start+18,2))
+        subsub[treeIndex]:add_le(odid_system_opGeoAlt, buffer(msg_start+18,2)):append_text(alt_text(buffer(msg_start+18,2)))
         if showTOALag == 1 then
             subsub[treeIndex]:add_le(odid_system_timeStamp, buffer(msg_start+20,4),buffer(msg_start+20,4):le_uint(),timeDelta(pktTime,buffer(msg_start+20,4):le_uint()))
         else
