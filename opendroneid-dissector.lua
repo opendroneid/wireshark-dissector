@@ -4,6 +4,8 @@
 
 debugMode = 0
 showTOALag = 1
+-- Set to 1 to include decoded values in the tree, appended to the raw value.
+showDecodedValues = 1
 
 -- As the BitOp library is bundled with all version of Wireshark, this extract
 -- function should be compatible across all Wireshark versions.
@@ -361,7 +363,9 @@ end
 
 -- decode raw latitude or longitude to deg
 function latlon_text(buf,latlon_unknown)
-    if latlon_unknown then
+    if showDecodedValues == 0 then
+        return ""
+    elseif latlon_unknown then
         return " (Unknown)"
     else
         return string.format(" (%.7f deg)",buf:le_int()/1e7)
@@ -370,6 +374,9 @@ end
 
 -- decode raw altitude to m and ft
 function alt_text(buf)
+    if showDecodedValues == 0 then
+        return ""
+    end
     local value_m = (buf:le_uint()*0.5)-1000
     if value_m == -1000 then
         return " (Unknown)"
@@ -380,6 +387,9 @@ end
 
 -- decode raw vertical speed to m/s
 function vspeed_text(buf)
+    if showDecodedValues == 0 then
+        return ""
+    end
     local value_mps = buf:le_int()*0.5
     if value_mps == 63 then
         return " (Unknown)"
@@ -390,12 +400,18 @@ end
 
 -- decode raw area radius to meters
 function rad_text(buf)
+    if showDecodedValues == 0 then
+        return ""
+    end
     local value_m = buf:le_uint()*10
     return string.format(" (%.0f m)",value_m)
 end
 
 -- decode raw direction and east/west flag to degrees
 function dir_text(buf,flag_ewDirectionSegment)
+    if showDecodedValues == 0 then
+        return ""
+    end
     local value_deg
     if flag_ewDirectionSegment == 1 then
         value_deg = buf:le_uint()+180
@@ -411,6 +427,9 @@ end
 
 -- decode raw speed and multiplier flag to m/s
 function speed_text(buf,flag_speedMultiplier)
+    if showDecodedValues == 0 then
+        return ""
+    end
     local speed_mps
     if flag_speedMultiplier == 1 then
         speed_mps = (buf:le_uint()*0.75)+(255*0.25)
