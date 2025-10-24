@@ -285,6 +285,8 @@ odid_system_reserved = ProtoField.bytes("OpenDroneID.system_reserved","Reserved"
 odid_operator_type = ProtoField.uint8("OpenDroneID.operator_type","Operator ID Type",base.DEC,operatorIDTypes)
 odid_operator_id = ProtoField.string("OpenDroneID.operator_id","Operator ID",base.ASCII)
 odid_operator_reserved = ProtoField.bytes("OpenDroneID.operator_reserved","Reserved",base.SPACE)
+-- Error/diagnostic field
+odid_error = ProtoField.string("OpenDroneID.error","Error")
 
 odid_protocol.fields = { 
     odid_app_code, odid_counter, odid_msgType, odid_protoVersion, odid_msgPack_msgSize, odid_msgPack_msgQty, 
@@ -306,7 +308,9 @@ odid_protocol.fields = {
     odid_system_areaCount, odid_system_areaRadius, odid_system_areaCeiling, odid_system_areaFloor, odid_system_uaClass, 
     odid_system_uaClassEUCat,odid_system_uaClassEUClass, odid_system_opGeoAlt, odid_system_timeStamp, odid_system_reserved,
 
-    odid_operator_type, odid_operator_id, odid_operator_reserved
+    odid_operator_type, odid_operator_id, odid_operator_reserved,
+
+    odid_error
 }
 
 function dump(o)
@@ -582,8 +586,8 @@ function findMessageOffset(buffer,len)
         nanSDA = frameTypeOffset+0x1e
     }
     local frameTypes = {
-        BEACON = 0x8000,
-        ACTION = 0xd000,
+        BEACON = 0x80,
+        ACTION = 0xd0,
         BT_ADV = 0x8e89bed6,
         BT_ADV_NONCONN_IND = 0x2,
         BT_ADV_SCAN_IND = 0x6,
@@ -605,8 +609,11 @@ function findMessageOffset(buffer,len)
     -- First, determine if Beacon or Action frame (reject otherwise)
     local frameType = buffer(frameOffset.frameType,2):uint()
     local frameType4 = buffer(frameOffset.frameType,4):le_uint()
-    debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", frameType4="..frameType4.."("..string.format("0x%x",frameType4).."), len="..len)
-    if frameType == frameTypes.BEACON then
+    local fc_low = buffer(frameOffset.frameType,1):uint()   -- subtype/type (little-endian low byte)
+    local fc_high = buffer(frameOffset.frameType+1,1):uint() -- flags (little-endian high byte)
+    debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", frameType4="..frameType4.."("..string.format("0x%x",frameType4).."), len="..len..", fc_low=0x"..string.format("%02x", fc_low)..", fc_high=0x"..string.format("%02x", fc_high))
+    -- Accept Beacon/Action based on low byte (subtype), ignoring flags in the high byte
+    if fc_low == frameTypes.BEACON then -- Beacon
         -- this is a beacon, so iterate through tags
         bp = frameOffset.beaconTags
         while bp < len-30 do -- If there's not at least 30 bytes left, there's no room for another RID message, so just stop looking
@@ -639,7 +646,7 @@ function findMessageOffset(buffer,len)
         -- no VSIE found
         debugPrint("This is a beacon, but no VSIE found, bp="..bp..", len="..len)
         return 0,0
-    elseif frameType == frameTypes.ACTION then
+    elseif fc_low == frameTypes.ACTION then -- Action
         bp = frameOffset.publicAction
         if buffer(bp,6):bytes():raw() == ouis.nanParams then
             -- we have NAN, now lets check for ODID
@@ -764,7 +771,16 @@ function odid_protocol.dissector(buffer, pinfo, tree)
 
         for n=1,buffer(start+3,1):int() do
             local msg_start = (start+4) + (n-1)*msgSize
-            odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize,pinfo.abs_ts)
+            -- Ensure the sub-message fits within the available protocol payload to avoid truncation errors
+            if msg_start + msgSize <= start + protoLen then
+                odid_messageSubTree(buffer,subsub[0],msg_start,n,msgSize,pinfo.abs_ts)
+            else
+                local parentNode = subsub[0] or subtree
+                local have = math.max(0, start + protoLen - msg_start)
+                parentNode:add(odid_error, string.format("Truncated sub-message #%d: expected %d bytes, but only %d byte(s) remain", n, msgSize, have))
+                debugPrint(string.format("Sub-message #%d truncated: msg_start=%d msgSize=%d start=%d protoLen=%d", n, msg_start, msgSize, start, protoLen))
+                break
+            end
         end
     else
         msgSize=25
