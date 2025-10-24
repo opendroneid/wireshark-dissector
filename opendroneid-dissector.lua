@@ -586,8 +586,8 @@ function findMessageOffset(buffer,len)
         nanSDA = frameTypeOffset+0x1e
     }
     local frameTypes = {
-        BEACON = 0x8000,
-        ACTION = 0xd000,
+        BEACON = 0x80,
+        ACTION = 0xd0,
         BT_ADV = 0x8e89bed6,
         BT_ADV_NONCONN_IND = 0x2,
         BT_ADV_SCAN_IND = 0x6,
@@ -613,7 +613,7 @@ function findMessageOffset(buffer,len)
     local fc_high = buffer(frameOffset.frameType+1,1):uint() -- flags (little-endian high byte)
     debugPrint ("frameTypeOffset: "..frameTypeOffset..", frameType: "..frameType..", frameType4="..frameType4.."("..string.format("0x%x",frameType4).."), len="..len..", fc_low=0x"..string.format("%02x", fc_low)..", fc_high=0x"..string.format("%02x", fc_high))
     -- Accept Beacon/Action based on low byte (subtype), ignoring flags in the high byte
-    if fc_low == 0x80 then -- Beacon
+    if fc_low == frameTypes.BEACON then -- Beacon
         -- this is a beacon, so iterate through tags
         bp = frameOffset.beaconTags
         while bp < len-30 do -- If there's not at least 30 bytes left, there's no room for another RID message, so just stop looking
@@ -646,7 +646,7 @@ function findMessageOffset(buffer,len)
         -- no VSIE found
         debugPrint("This is a beacon, but no VSIE found, bp="..bp..", len="..len)
         return 0,0
-    elseif fc_low == 0xD0 then -- Action
+    elseif fc_low == frameTypes.ACTION then -- Action
         bp = frameOffset.publicAction
         if buffer(bp,6):bytes():raw() == ouis.nanParams then
             -- we have NAN, now lets check for ODID
