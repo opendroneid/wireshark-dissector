@@ -741,7 +741,8 @@ function odid_protocol.dissector(buffer, pinfo, tree)
     debugPrint("debug on")
 
     local length = buffer:len()
-    local minLen = 0x21 + 25
+    -- Legacy ADV in BLE_LL_WITH_PHDR framing is 56 bytes
+    local minLen = 56
     if length < minLen then 
         debugPrint("too short ("..length.." < "..minLen)
         return 
